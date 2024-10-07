@@ -1,0 +1,40 @@
+name: cd
+
+on:
+  push:
+    tags:
+      - "V*.*.*"
+
+jobs:
+  build-and-release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        target: [x86_64-unknown-linux-musl]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install just
+        uses: extractions/setup-just@v2
+
+      - name: Extract version number
+        id: extract_version
+        run: echo "medi-rs_version=$(echo ${{ github.ref }} | sed 's/refs\/tags\/V\(.*\)/\1/')" >> $GITHUB_ENV
+
+      - name: Install Docker for local builds
+        run: just build-docker $(id -u)
+
+      - name: Build CLI tool
+        run: just release ${{ env.medi-rs_version }} --target ${{ matrix.target }}
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/${{ matrix.target }}/release/creatorly
+          tag_name: ${{ github.ref }}
+          name: 🎉 creatorly V${{ env.medi-rs_version }}
+          draft: false
+          prerelease: false

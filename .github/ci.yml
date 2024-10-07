@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci_build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - uses: extractions/setup-just@v2
+
+      - name: Install Docker for local builds
+        run: just build-docker $(id -u)
+
+      - name: Check Code Format
+        run: just check-format
+
+      - name: Lint Code
+        run: just lint
+
+      - name: Generate code coverage
+        run: just coverage
+
+      - name: Dry-Run release generation with version 0.0.0
+        run: just release 0.0.0 --target x86_64-unknown-linux-musl
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+          files: lcov.info
