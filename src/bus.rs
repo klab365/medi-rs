@@ -1,4 +1,5 @@
-use crate::error::Result;
+use crate::common;
+use crate::error::{Error, Result};
 use crate::traits::{Handler, HandlerWrapperTrait, IntoReq};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{any::TypeId, collections::HashMap};
@@ -36,11 +37,14 @@ impl Bus {
         Res: DeserializeOwned + 'static,
     {
         let type_id = TypeId::of::<Req>();
-        let handler = self.req_handlers.get(&type_id).unwrap();
+        let handler = self.req_handlers.get(&type_id);
+        let Some(handler) = handler else {
+            return Err(Error::HandlerNotFound);
+        };
 
-        let encoded = req.into_encoded();
+        let encoded = common::serialize(&req)?;
         let res = handler.handle(&encoded).await?;
-        let res = bincode::deserialize(&res).unwrap();
+        let res = common::deserialize(&res)?;
         Ok(res)
     }
 }

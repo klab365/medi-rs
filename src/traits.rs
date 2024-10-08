@@ -1,22 +1,12 @@
-use crate::error::Result;
+use crate::{common, error::Result};
 use std::marker::PhantomData;
 use serde::{de::DeserializeOwned, Serialize};
 
-pub trait IntoReq<Res>: Serialize + DeserializeOwned + Send {
-    fn into_req(value: &[u8]) -> Self {
-        let req = bincode::deserialize(value).unwrap();
-        req
-    }
-
-    fn into_encoded(&self) -> Vec<u8> {
-        let encoded = bincode::serialize(self).unwrap();
-        encoded
-    }
-}
+pub trait IntoReq<Res>: Serialize + DeserializeOwned + Send {}
 
 #[async_trait::async_trait]
 pub trait HandlerWrapperTrait: Send + Sync {
-    async fn handle(&self, value: &[u8]) -> Result<Vec<u8>>;
+    async fn handle(&self, value: &common::Decoded) -> Result<common::Encoded>;
 }
 
 #[async_trait::async_trait]
@@ -57,7 +47,7 @@ where
     Res: Serialize + DeserializeOwned + Sync + Send + 'static,
 {
     async fn handle(&self, value: &[u8]) -> Result<Vec<u8>> {
-        let arg1 = Req::into_req(value);
+        let arg1 = common::deserialize(value)?;
         let handler = self.handler.clone();
         let res = handler.handle(arg1).await?;
         let res = bincode::serialize(&res).unwrap();
@@ -68,7 +58,7 @@ where
 #[async_trait::async_trait]
 impl<Req, Res, F> Handler<Req, Res> for F
 where
-    F: Fn(Req) -> Result<Res> + Clone + Send + Sync + 'static,
+    F: FnOnce(Req) -> Result<Res> + Clone + Send + Sync + 'static,
     Req: IntoReq<Res> + Sync + Send + 'static,
     Res: Serialize + DeserializeOwned + Sync + Send + 'static,
 {
