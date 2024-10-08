@@ -1,9 +1,9 @@
 use crate::bus::bus_builder::BusBuilder;
 use crate::common;
 use crate::error::{Error, Result};
-use crate::traits::{Handler, HandlerWrapperTrait, IntoReq, SharedHandler};
-use serde::{de::DeserializeOwned, Serialize};
-use std::{any::TypeId, collections::HashMap};
+use crate::traits::{HandlerWrapperTrait, IntoReq, SharedHandler};
+use serde::de::DeserializeOwned;
+use std::any::TypeId;
 
 pub struct Bus {
     req_handlers: SharedHandler<Box<dyn HandlerWrapperTrait>>,
