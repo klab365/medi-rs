@@ -1,6 +1,8 @@
 use crate::{common, error::Result};
-use std::marker::PhantomData;
 use serde::{de::DeserializeOwned, Serialize};
+use std::{any::TypeId, collections::HashMap, marker::PhantomData};
+
+pub type SharedHandler<T> = HashMap<TypeId, T>;
 
 pub trait IntoReq<Res>: Serialize + DeserializeOwned + Send {}
 

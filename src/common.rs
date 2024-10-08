@@ -1,10 +1,9 @@
-use serde::{de::DeserializeOwned, Serialize};
-use crate::error::Result;
 use crate::error::Error;
+use crate::error::Result;
+use serde::{de::DeserializeOwned, Serialize};
 
 pub type Encoded = Vec<u8>;
 pub type Decoded = [u8];
-
 
 pub fn serialize<T: Serialize + DeserializeOwned + Send>(value: &T) -> Result<Encoded> {
     bincode::serialize(value).map_err(|_| Error::SerializationError)

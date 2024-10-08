@@ -1,4 +1,7 @@
 pub mod bus;
+pub(crate) mod common;
 pub mod error;
 pub mod traits;
-pub(crate) mod common;
+
+// flatten the module structure
+pub use bus::bus::*;

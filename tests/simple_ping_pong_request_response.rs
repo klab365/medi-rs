@@ -1,12 +1,11 @@
-use medi_rs::error::Result;
-use medi_rs::{bus::Bus, traits::IntoReq};
+use medi_rs::traits::IntoReq;
+use medi_rs::{bus::bus_builder::BusBuilder, error::Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[tokio::test]
 async fn send_should_return_correct_pong() {
-    let mut bus = Bus::new();
-    bus.add_req_handler(print_ping);
+    let bus = BusBuilder::default().add_req_handler(print_ping).build();
 
     let pong = bus.send(Ping("Ping".to_string())).await.unwrap();
 
@@ -15,8 +14,7 @@ async fn send_should_return_correct_pong() {
 
 #[tokio::test]
 async fn send_should_return_correct_multiple_pong_without_multithreading() {
-    let mut bus = Bus::new();
-    bus.add_req_handler(print_ping);
+    let bus = BusBuilder::default().add_req_handler(print_ping).build();
 
     let pong = bus.send(Ping("Ping".to_string())).await.unwrap();
     assert_eq!(pong.0, "Pong: Ping");
@@ -27,8 +25,7 @@ async fn send_should_return_correct_multiple_pong_without_multithreading() {
 
 #[tokio::test]
 async fn send_should_return_correct_return_values_when_multithreading() {
-    let mut bus = Bus::new();
-    bus.add_req_handler(print_ping);
+    let bus = BusBuilder::default().add_req_handler(print_ping).build();
 
     let mut handlers = vec![];
     let bus = Arc::new(bus);
