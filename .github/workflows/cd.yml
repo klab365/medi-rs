@@ -35,6 +35,6 @@ jobs:
           files: |
             target/${{ matrix.target }}/release/creatorly
           tag_name: ${{ github.ref }}
-          name: 🎉 creatorly V${{ env.medi-rs_version }}
+          name: 🎉 new medi-rs V${{ env.medi-rs_version }}
           draft: false
           prerelease: false
