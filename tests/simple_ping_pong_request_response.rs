@@ -1,8 +1,7 @@
-use std::sync::Arc;
-
-use medi_rs::traits::Result;
+use medi_rs::error::Result;
 use medi_rs::{bus::Bus, traits::IntoReq};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[tokio::test]
 async fn send_should_return_correct_pong() {

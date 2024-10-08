@@ -1,4 +1,4 @@
-use crate::traits::Result;
+use crate::error::Result;
 use crate::traits::{Handler, HandlerWrapperTrait, IntoReq};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{any::TypeId, collections::HashMap};

@@ -1,14 +1,6 @@
+use crate::error::Result;
 use std::marker::PhantomData;
-
 use serde::{de::DeserializeOwned, Serialize};
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Handler not found")]
-    HandlerNotFound,
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait IntoReq<Res>: Serialize + DeserializeOwned + Send {
     fn into_req(value: &[u8]) -> Self {
@@ -23,12 +15,12 @@ pub trait IntoReq<Res>: Serialize + DeserializeOwned + Send {
 }
 
 #[async_trait::async_trait]
-pub(crate) trait HandlerWrapperTrait: Send + Sync {
+pub trait HandlerWrapperTrait: Send + Sync {
     async fn handle(&self, value: &[u8]) -> Result<Vec<u8>>;
 }
 
 #[async_trait::async_trait]
-pub(crate) trait Handler<Req, Res>: Clone
+pub trait Handler<Req, Res>: Clone
 where
     Req: IntoReq<Res> + Send + Sync + 'static,
     Res: Serialize + DeserializeOwned + Send + Sync + 'static,
