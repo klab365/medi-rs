@@ -1,5 +1,5 @@
 use medi_rs::traits::IntoReq;
-use medi_rs::{bus::bus_builder::BusBuilder, error::Result};
+use medi_rs::{bus::BusBuilder, error::Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

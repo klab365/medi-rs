@@ -4,4 +4,4 @@ pub mod error;
 pub mod traits;
 
 // flatten the module structure
-pub use bus::bus::*;
+pub use bus::*;
