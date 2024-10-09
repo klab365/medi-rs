@@ -33,7 +33,10 @@ impl Bus {
 
         let req = Box::new(req);
         let res = handler.handle(req).await?;
-        let res = common::deserialize(&res)?;
-        Ok(res)
+        let Ok(res) = res.downcast::<Res>() else {
+            return Err(Error::SerializationError);
+        };
+
+        Ok(*res)
     }
 }

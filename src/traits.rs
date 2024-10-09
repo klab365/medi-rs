@@ -8,7 +8,7 @@ pub trait IntoReq<Res>: Serialize + DeserializeOwned + Send {}
 
 #[async_trait::async_trait]
 pub trait HandlerWrapperTrait: Send + Sync {
-    async fn handle(&self, value: Box<dyn Any + Send + Sync>) -> Result<common::Encoded>;
+    async fn handle(&self, value: Box<dyn Any + Send + Sync>) -> Result<Box<dyn Any + Send + Sync>>;
 }
 
 #[async_trait::async_trait]
@@ -48,7 +48,7 @@ where
     Req: IntoReq<Res> + Sync + Send + 'static,
     Res: Serialize + DeserializeOwned + Sync + Send + 'static,
 {
-    async fn handle(&self, value: Box<dyn Any + Send + Sync>) -> Result<Vec<u8>> {
+    async fn handle(&self, value: Box<dyn Any + Send + Sync>) -> Result<Box<dyn Any + Send + Sync>> {
         let Ok(arg) = value.downcast::<Req>() else {
             return Err(Error::SerializationError);
         };
@@ -56,7 +56,7 @@ where
 
         let handler = self.handler.clone();
         let res = handler.handle(*arg).await?;
-        let res = bincode::serialize(&res).unwrap();
+        let res = Box::new(res);
         Ok(res)
     }
 }
