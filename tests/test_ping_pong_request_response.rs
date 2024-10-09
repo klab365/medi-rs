@@ -32,7 +32,10 @@ async fn send_should_return_correct_return_values_when_multithreading() {
     for i in 0..100 {
         let bus = bus.clone();
         let handler = tokio::spawn(async move {
+            let rand_time = rand::random::<u64>() % 100;
+            tokio::time::sleep(tokio::time::Duration::from_millis(rand_time)).await;
             let pong = bus.send(Ping(format!("Ping{}", i))).await.unwrap();
+            println!("Pong: {}", pong.0);
             assert_eq!(pong.0, format!("Pong: Ping{}", i));
         });
 
