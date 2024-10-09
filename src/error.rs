@@ -5,8 +5,8 @@ pub enum Error {
     #[error("Handler not found")]
     HandlerNotFound,
 
-    #[error("Serialization error")]
-    SerializationError,
+    #[error("Cast error")]
+    CastError,
 
     #[error(transparent)]
     Other(#[from] Box<dyn std::error::Error + Sync + Send + 'static>),

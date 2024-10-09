@@ -24,6 +24,7 @@ impl Bus {
         Res: Send + Sync + 'static,
     {
         let type_id = TypeId::of::<Req>();
+        
         let handler = self.req_handlers.get(&type_id);
         let Some(handler) = handler else {
             return Err(Error::HandlerNotFound);
@@ -31,8 +32,9 @@ impl Bus {
 
         let req = Box::new(req);
         let res = handler.handle(req).await?;
+
         let Ok(res) = res.downcast::<Res>() else {
-            return Err(Error::SerializationError);
+            return Err(Error::CastError);
         };
 
         Ok(*res)

@@ -53,7 +53,7 @@ where
 {
     async fn handle(&self, value: Box<dyn Any + Send + Sync>) -> Result<Box<dyn Any + Send + Sync>> {
         let Ok(arg) = value.downcast::<Req>() else {
-            return Err(Error::SerializationError);
+            return Err(Error::CastError);
         };
 
         let handler = self.handler.clone();
