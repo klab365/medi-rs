@@ -1,6 +1,6 @@
-use crate::{common, error::Result};
+use crate::{common, error::{Error, Result}};
 use serde::{de::DeserializeOwned, Serialize};
-use std::{any::TypeId, collections::HashMap, marker::PhantomData};
+use std::{any::{Any, TypeId}, collections::HashMap, marker::PhantomData};
 
 pub type SharedHandler<T> = HashMap<TypeId, T>;
 
@@ -8,7 +8,7 @@ pub trait IntoReq<Res>: Serialize + DeserializeOwned + Send {}
 
 #[async_trait::async_trait]
 pub trait HandlerWrapperTrait: Send + Sync {
-    async fn handle(&self, value: &common::Decoded) -> Result<common::Encoded>;
+    async fn handle(&self, value: Box<dyn Any + Send + Sync>) -> Result<common::Encoded>;
 }
 
 #[async_trait::async_trait]
@@ -48,10 +48,14 @@ where
     Req: IntoReq<Res> + Sync + Send + 'static,
     Res: Serialize + DeserializeOwned + Sync + Send + 'static,
 {
-    async fn handle(&self, value: &[u8]) -> Result<Vec<u8>> {
-        let arg1 = common::deserialize(value)?;
+    async fn handle(&self, value: Box<dyn Any + Send + Sync>) -> Result<Vec<u8>> {
+        let Ok(arg) = value.downcast::<Req>() else {
+            return Err(Error::SerializationError);
+        };
+
+
         let handler = self.handler.clone();
-        let res = handler.handle(arg1).await?;
+        let res = handler.handle(*arg).await?;
         let res = bincode::serialize(&res).unwrap();
         Ok(res)
     }

@@ -22,8 +22,8 @@ impl Bus {
 
     pub async fn send<Req, Res>(&self, req: Req) -> Result<Res>
     where
-        Req: IntoReq<Res> + 'static,
-        Res: DeserializeOwned + 'static,
+        Req: IntoReq<Res> + Send + Sync + 'static,
+        Res: DeserializeOwned + Send + Sync + 'static,
     {
         let type_id = TypeId::of::<Req>();
         let handler = self.req_handlers.get(&type_id);
@@ -31,8 +31,8 @@ impl Bus {
             return Err(Error::HandlerNotFound);
         };
 
-        let encoded = common::serialize(&req)?;
-        let res = handler.handle(&encoded).await?;
+        let req = Box::new(req);
+        let res = handler.handle(req).await?;
         let res = common::deserialize(&res)?;
         Ok(res)
     }
