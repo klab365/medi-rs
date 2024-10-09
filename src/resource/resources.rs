@@ -2,23 +2,14 @@ use std::{any::TypeId, sync::Arc};
 
 use super::{resources_builder::ResourcesBuilder, AnyMap};
 
-
-
+#[derive(Debug, Clone, Default)]
 pub struct Resources {
-    map: Arc<Option<AnyMap>>
+    map: Arc<Option<AnyMap>>,
 }
 
 impl Resources {
-    pub fn builder() -> ResourcesBuilder {
-        ResourcesBuilder::default()
-    }
-}
-
-impl Resources {
-    pub fn new(map: Option<AnyMap>) -> Self {
-        Self {
-            map: Arc::new(map)
-        }
+    pub(crate) fn new(map: Option<AnyMap>) -> Self {
+        Self { map: Arc::new(map) }
     }
 
     pub fn get<T: Clone + Send + Sync + 'static>(&self) -> Option<T> {
@@ -27,6 +18,7 @@ impl Resources {
             panic!("Resources not initialized");
         };
 
-        map.get(&TypeId::of::<T>()).map(|v| v.downcast_ref::<T>().unwrap().clone())
+        map.get(&TypeId::of::<T>())
+            .map(|v| v.downcast_ref::<T>().unwrap().clone())
     }
 }

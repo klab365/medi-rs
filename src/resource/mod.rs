@@ -1,9 +1,11 @@
-use std::{any::{Any, TypeId}, collections::HashMap};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+};
 
-pub mod resources_builder;
-pub mod resources;
-pub mod from_resources;
 pub mod error;
-
+pub mod from_resources;
+pub mod resources;
+pub mod resources_builder;
 
 type AnyMap = HashMap<TypeId, Box<dyn Any + Send + Sync>>;

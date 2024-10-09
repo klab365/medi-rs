@@ -1,14 +1,12 @@
-use std::any::TypeId;
 use super::{resources::Resources, AnyMap};
+use std::any::TypeId;
 
 #[derive(Default)]
 pub struct ResourcesBuilder {
-    map: Option<AnyMap>
+    map: Option<AnyMap>,
 }
 
-
 impl ResourcesBuilder {
-
     pub fn insert<T: Clone + Send + Sync + 'static>(&mut self, value: T) {
         self.map
             .get_or_insert_with(AnyMap::new)

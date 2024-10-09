@@ -1,10 +1,12 @@
 use crate::bus::bus_builder::BusBuilder;
 use crate::error::{Error, Result};
+use crate::resource::resources::Resources;
 use crate::traits::{HandlerWrapperTrait, IntoReq, SharedHandler};
 use std::any::TypeId;
 
 pub struct Bus {
     req_handlers: SharedHandler<Box<dyn HandlerWrapperTrait>>,
+    resources: Resources,
 }
 
 impl Bus {
@@ -14,8 +16,11 @@ impl Bus {
 }
 
 impl Bus {
-    pub(crate) fn new(req_handlers: SharedHandler<Box<dyn HandlerWrapperTrait>>) -> Self {
-        Bus { req_handlers }
+    pub(crate) fn new(resources: Resources, req_handlers: SharedHandler<Box<dyn HandlerWrapperTrait>>) -> Self {
+        Bus {
+            resources,
+            req_handlers,
+        }
     }
 
     pub async fn send<Req, Res>(&self, req: Req) -> Result<Res>
@@ -31,7 +36,7 @@ impl Bus {
         };
 
         let req = Box::new(req);
-        let res = handler.handle(req).await?;
+        let res = handler.handle(self.resources.clone(), req).await?;
 
         let Ok(res) = res.downcast::<Res>() else {
             return Err(Error::CastError);

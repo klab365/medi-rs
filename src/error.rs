@@ -10,6 +10,9 @@ pub enum Error {
 
     #[error(transparent)]
     Other(#[from] Box<dyn std::error::Error + Sync + Send + 'static>),
+
+    #[error(transparent)]
+    Resource(#[from] crate::resource::error::ResourceError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
