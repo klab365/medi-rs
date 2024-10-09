@@ -1,7 +1,5 @@
 use std::{any::TypeId, collections::HashMap};
 
-use serde::{de::DeserializeOwned, Serialize};
-
 use crate::traits::{Handler, HandlerWrapperTrait, IntoReq, SharedHandler};
 
 use super::Bus;
@@ -23,7 +21,7 @@ impl BusBuilder {
     where
         H: Handler<Req, Res> + Sync + Send + 'static,
         Req: IntoReq<Res> + Sync + Send + 'static,
-        Res: Serialize + DeserializeOwned + Sync + Send + 'static,
+        Res: Sync + Send + 'static,
     {
         let type_id = TypeId::of::<Req>();
 

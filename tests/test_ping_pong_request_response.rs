@@ -1,7 +1,6 @@
 use medi_rs::error::Error;
 use medi_rs::traits::IntoReq;
 use medi_rs::{bus::BusBuilder, error::Result};
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -77,9 +76,8 @@ enum PingPongError {
     Error1,
 }
 
-#[derive(Serialize, Deserialize)]
 struct Ping(String);
 impl IntoReq<Pong> for Ping {}
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 struct Pong(String);

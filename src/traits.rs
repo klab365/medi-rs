@@ -1,10 +1,13 @@
-use crate::{common, error::{Error, Result}};
-use serde::{de::DeserializeOwned, Serialize};
-use std::{any::{Any, TypeId}, collections::HashMap, marker::PhantomData};
+use crate::error::{Error, Result};
+use std::{
+    any::{Any, TypeId},
+    collections::HashMap,
+    marker::PhantomData,
+};
 
 pub type SharedHandler<T> = HashMap<TypeId, T>;
 
-pub trait IntoReq<Res>: Serialize + DeserializeOwned + Send {}
+pub trait IntoReq<Res>: Send {}
 
 #[async_trait::async_trait]
 pub trait HandlerWrapperTrait: Send + Sync {
@@ -15,7 +18,7 @@ pub trait HandlerWrapperTrait: Send + Sync {
 pub trait Handler<Req, Res>: Clone
 where
     Req: IntoReq<Res> + Send + Sync + 'static,
-    Res: Serialize + DeserializeOwned + Send + Sync + 'static,
+    Res: Send + Sync + 'static,
 {
     async fn handle(self, value: Req) -> Result<Res>;
 
@@ -46,13 +49,12 @@ impl<H, Req, Res> HandlerWrapperTrait for HandlerWrapper<H, Req, Res>
 where
     H: Handler<Req, Res> + Sync + Send + 'static,
     Req: IntoReq<Res> + Sync + Send + 'static,
-    Res: Serialize + DeserializeOwned + Sync + Send + 'static,
+    Res: Sync + Send + 'static,
 {
     async fn handle(&self, value: Box<dyn Any + Send + Sync>) -> Result<Box<dyn Any + Send + Sync>> {
         let Ok(arg) = value.downcast::<Req>() else {
             return Err(Error::SerializationError);
         };
-
 
         let handler = self.handler.clone();
         let res = handler.handle(*arg).await?;
@@ -66,7 +68,7 @@ impl<Req, Res, F> Handler<Req, Res> for F
 where
     F: FnOnce(Req) -> Result<Res> + Clone + Send + Sync + 'static,
     Req: IntoReq<Res> + Sync + Send + 'static,
-    Res: Serialize + DeserializeOwned + Sync + Send + 'static,
+    Res: Sync + Send + 'static,
 {
     async fn handle(self, value: Req) -> Result<Res> {
         let arg1 = value;

@@ -1,6 +1,5 @@
-use medi_rs::{traits::IntoReq, BusBuilder};
 use medi_rs::error::Result;
-use serde::{Deserialize, Serialize};
+use medi_rs::{traits::IntoReq, BusBuilder};
 
 #[tokio::test]
 async fn send_should_take_less_than_1ms() {
@@ -10,6 +9,8 @@ async fn send_should_take_less_than_1ms() {
     let pong = bus.send(Ping("Ping".to_string())).await.unwrap();
     let duration = watch.elapsed();
 
+    println!("Duration: {:?}", duration);
+
     assert_eq!(pong, "Pong: Ping");
     assert!(duration.as_millis() < 1);
 }
@@ -18,6 +19,5 @@ fn print_ping(ping: Ping) -> Result<String> {
     Ok(format!("Pong: {}", ping.0))
 }
 
-#[derive(Serialize, Deserialize)]
 struct Ping(String);
 impl IntoReq<String> for Ping {}

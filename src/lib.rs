@@ -1,5 +1,4 @@
 pub mod bus;
-pub(crate) mod common;
 pub mod error;
 pub mod traits;
 

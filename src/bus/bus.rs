@@ -1,8 +1,6 @@
 use crate::bus::bus_builder::BusBuilder;
-use crate::common;
 use crate::error::{Error, Result};
 use crate::traits::{HandlerWrapperTrait, IntoReq, SharedHandler};
-use serde::de::DeserializeOwned;
 use std::any::TypeId;
 
 pub struct Bus {
@@ -23,7 +21,7 @@ impl Bus {
     pub async fn send<Req, Res>(&self, req: Req) -> Result<Res>
     where
         Req: IntoReq<Res> + Send + Sync + 'static,
-        Res: DeserializeOwned + Send + Sync + 'static,
+        Res: Send + Sync + 'static,
     {
         let type_id = TypeId::of::<Req>();
         let handler = self.req_handlers.get(&type_id);

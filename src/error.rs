@@ -10,8 +10,6 @@ pub enum Error {
 
     #[error(transparent)]
     Other(#[from] Box<dyn std::error::Error + Sync + Send + 'static>),
-
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
-
