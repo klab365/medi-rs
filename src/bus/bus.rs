@@ -24,7 +24,7 @@ impl Bus {
         Res: Send + Sync + 'static,
     {
         let type_id = TypeId::of::<Req>();
-        
+
         let handler = self.req_handlers.get(&type_id);
         let Some(handler) = handler else {
             return Err(Error::HandlerNotFound);
