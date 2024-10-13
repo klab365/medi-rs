@@ -23,7 +23,8 @@
         "eamodio.gitlens",
         "asciidoctor.asciidoctor-vscode",
         "EditorConfig.EditorConfig",
-        "github.vscode-github-actions"
+        "github.vscode-github-actions",
+        "skellock.just"
       ]
     }
   }

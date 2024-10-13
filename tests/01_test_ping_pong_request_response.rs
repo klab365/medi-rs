@@ -1,13 +1,9 @@
+use medi_rs::{BusBuilder, HandlerResult, IntoReq};
 use std::sync::Arc;
-
-use medi_rs::traits::Result;
-use medi_rs::{bus::Bus, traits::IntoReq};
-use serde::{Deserialize, Serialize};
 
 #[tokio::test]
 async fn send_should_return_correct_pong() {
-    let mut bus = Bus::new();
-    bus.add_req_handler(print_ping);
+    let bus = BusBuilder::default().add_req_handler(print_ping).build();
 
     let pong = bus.send(Ping("Ping".to_string())).await.unwrap();
 
@@ -16,8 +12,7 @@ async fn send_should_return_correct_pong() {
 
 #[tokio::test]
 async fn send_should_return_correct_multiple_pong_without_multithreading() {
-    let mut bus = Bus::new();
-    bus.add_req_handler(print_ping);
+    let bus = BusBuilder::default().add_req_handler(print_ping).build();
 
     let pong = bus.send(Ping("Ping".to_string())).await.unwrap();
     assert_eq!(pong.0, "Pong: Ping");
@@ -28,15 +23,17 @@ async fn send_should_return_correct_multiple_pong_without_multithreading() {
 
 #[tokio::test]
 async fn send_should_return_correct_return_values_when_multithreading() {
-    let mut bus = Bus::new();
-    bus.add_req_handler(print_ping);
+    let bus = BusBuilder::default().add_req_handler(print_ping).build();
 
     let mut handlers = vec![];
     let bus = Arc::new(bus);
     for i in 0..100 {
         let bus = bus.clone();
         let handler = tokio::spawn(async move {
+            let rand_time = rand::random::<u64>() % 100;
+            tokio::time::sleep(tokio::time::Duration::from_millis(rand_time)).await;
             let pong = bus.send(Ping(format!("Ping{}", i))).await.unwrap();
+            println!("Pong: {}", pong.0);
             assert_eq!(pong.0, format!("Pong: Ping{}", i));
         });
 
@@ -48,13 +45,12 @@ async fn send_should_return_correct_return_values_when_multithreading() {
     }
 }
 
-fn print_ping(id: Ping) -> Result<Pong> {
+async fn print_ping(id: Ping) -> HandlerResult<Pong> {
     Ok(Pong(format!("Pong: {}", id.0)))
 }
 
-#[derive(Serialize, Deserialize)]
 struct Ping(String);
 impl IntoReq<Pong> for Ping {}
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug)]
 struct Pong(String);
