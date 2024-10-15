@@ -1,5 +1,10 @@
 set quiet
-CMD := "cargo"
+
+# the following two commands are specific to use in a docker container or not
+# if the command is run in a docker container, it will use the cargo installation inside the container (local development with docker use case)
+# if the command is run outside a docker container, it will use the docker container to run the command inside the container (CI use case)
+CMD := if path_exists('/.dockerenv') == "false" { 'docker run --rm -v $(pwd):/workspaces/creatorly -w /workspaces/creatorly rust-toolchain cargo' } else { 'cargo' }
+CMD_TTY := if path_exists('/.dockerenv') == "false" { 'docker run -it --rm -v $(pwd):/app -w /app rust-toolchain cargo' } else { 'cargo' }
 
 # build the docker image for ci
 build-docker id:
@@ -45,3 +50,9 @@ test:
 coverage:
     echo "Generating coverage..."
     {{ CMD }} llvm-cov --lcov --output-path lcov.info
+
+# run the example
+example:
+    echo "Running example..."
+    rm -rf target/new_project
+    {{ CMD_TTY }} run -- template generate local -t assets/example_project -d target/new_project
