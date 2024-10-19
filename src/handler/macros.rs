@@ -1,10 +1,10 @@
 #[macro_export]
 macro_rules! impl_handler {
-    ($req_trait:ident, $K:ty, $($T:ident), *) => {
+    ($($T:ident), *) => {
         impl<F, Fut, $($T,)* Req, Res, E> Handler<($($T,)*), Req, Res> for F
         where
             F: FnOnce($($T,)* Req) -> Fut + Clone + Send + Sync + 'static,
-            Req: $req_trait<Res>,
+            Req: Sync + Send + 'static,
             Res: Sync + Send + 'static,
             $($T: FromResources + Clone + Send + Sync + 'static,)*
             E: IntoHandlerError,
@@ -13,7 +13,7 @@ macro_rules! impl_handler {
             type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Res>> + Send + Sync>>;
 
             #[allow(unused)]
-            fn handle(self, resources: Resources, value: Req) -> Self::Future {
+            fn handle(self, resources: resource::Resources, value: Req) -> Self::Future {
                 Box::pin(async move {
                     let arg = value;
                     let res = self($($T::from_resources(&resources)?,)* arg).await;

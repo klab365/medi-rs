@@ -1,5 +1,5 @@
 use medi_rs::{
-    BusBuilder, FromResources, {HandlerResult, IntoReq},
+    BusBuilder, FromResources, {HandlerResult, IntoCommand},
 };
 use std::sync::{Arc, Mutex};
 
@@ -10,7 +10,8 @@ async fn send_should_work_with_dependencyinjection() {
     let bus = BusBuilder::default()
         .add_req_handler(create_user_dyn)
         .append_resources(state.clone())
-        .build();
+        .build()
+        .unwrap();
 
     bus.send(CreateUser { name: "John".into() }).await.unwrap();
 
@@ -26,7 +27,8 @@ async fn send_should_work_with_generic_dependencyinjection() {
     let bus = BusBuilder::default()
         .add_req_handler(create_user_generic)
         .append_resources(state.clone())
-        .build();
+        .build()
+        .unwrap();
 
     bus.send(CreateUser { name: "John".into() }).await.unwrap();
 
@@ -51,7 +53,7 @@ async fn create_user_generic(state: AppStateGeneric<InMemoryUserRepository>, req
 struct CreateUser {
     name: String,
 }
-impl IntoReq<()> for CreateUser {}
+impl IntoCommand<()> for CreateUser {}
 
 struct User {
     name: String,

@@ -9,6 +9,7 @@ use handler_wrapper::HandlerWrapperTrait;
 
 use crate::Resources;
 use crate::Result;
+use std::sync::Arc;
 use std::{any::TypeId, collections::HashMap};
 
 pub type SharedHandler<T> = HashMap<TypeId, T>;
@@ -24,10 +25,10 @@ where
     fn handle(self, resources: Resources, value: Req) -> Self::Future;
 
     #[allow(private_interfaces)]
-    fn into_dyn(self) -> Box<dyn HandlerWrapperTrait>
+    fn into_dyn(self) -> Arc<dyn HandlerWrapperTrait>
     where
         Self: Sized + Send + Sync + 'static,
     {
-        Box::new(HandlerWrapper::new(self)) as Box<dyn HandlerWrapperTrait>
+        Arc::new(HandlerWrapper::new(self)) as Arc<dyn HandlerWrapperTrait>
     }
 }

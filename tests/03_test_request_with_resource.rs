@@ -1,6 +1,6 @@
 use medi_rs::BusBuilder;
 use medi_rs::FromResources;
-use medi_rs::{HandlerResult, IntoReq};
+use medi_rs::{HandlerResult, IntoCommand};
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -9,7 +9,8 @@ async fn send_should_return_correct_value_from_the_resource() {
     let bus = BusBuilder::default()
         .add_req_handler(print_ping)
         .append_resources(state.clone())
-        .build();
+        .build()
+        .unwrap();
 
     bus.send(Ping("hello".into())).await.unwrap();
     bus.send(Ping("world".into())).await.unwrap();
@@ -40,4 +41,4 @@ async fn print_ping(state: AppState, req: Ping) -> HandlerResult<()> {
 }
 
 struct Ping(String);
-impl IntoReq<()> for Ping {}
+impl IntoCommand<()> for Ping {}
