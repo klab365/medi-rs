@@ -24,10 +24,9 @@ struct ValidateUser {
 impl IntoCommand<()> for ValidateUser {}
 
 // handler functions...
-
 async fn create_user_dyn(bus: Bus, req: CreateUser) -> HandlerResult<()> {
     println!("Creating user: {}", req.name);
-    bus.send(ValidateUser { name: req.name }).await.unwrap();
+    bus.send(ValidateUser { name: req.name }).await?;
     Ok(())
 }
 

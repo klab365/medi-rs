@@ -11,7 +11,7 @@ pub enum Error {
     CastError,
 
     #[error(transparent)]
-    Handler(HandlerError),
+    Handler(#[from] HandlerError),
 
     #[error("Resource not found")]
     ResourceNotFound,
@@ -24,10 +24,3 @@ pub enum Error {
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
-
-// -- from implementation for Error
-impl From<HandlerError> for Error {
-    fn from(e: HandlerError) -> Self {
-        Self::Handler(e)
-    }
-}

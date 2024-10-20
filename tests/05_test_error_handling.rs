@@ -15,7 +15,7 @@ async fn send_should_return_error() {
         Err(err) => match err {
             medi_rs::Error::Handler(handler_error) => {
                 let my_error = handler_error.get::<Error>().unwrap();
-                assert!(matches!(my_error, Error::Error(_)));
+                assert!(matches!(my_error, Error::Basic(_)));
             }
             _ => panic!("Expected HandlerError, got {:?}", err),
         },
@@ -55,11 +55,11 @@ async fn send_should_return_error_when_no_resource_found() {
 }
 
 async fn error_handler(_req: BasicRequest) -> Result<(), Error> {
-    Err(Error::Error("Error".to_string()))
+    Err(Error::Basic("Error".to_string()))
 }
 
 async fn error_handler1(_state: AppState, _req: BasicRequest) -> Result<(), Error> {
-    Err(Error::Error("Error".to_string()))
+    Err(Error::Basic("Error".to_string()))
 }
 
 #[derive(Debug, Clone)]
@@ -74,7 +74,7 @@ impl IntoCommand<()> for BasicRequest {}
 #[derive(thiserror::Error, Debug)]
 enum Error {
     #[error("Error")]
-    Error(String),
+    Basic(String),
 
     #[error("Bus error")]
     BusError(#[from] medi_rs::Error),
