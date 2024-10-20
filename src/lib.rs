@@ -3,7 +3,6 @@ mod error;
 mod handler;
 mod resource;
 
-
 // flatten the module structure
 pub use bus::*;
 pub use error::*;
@@ -28,10 +27,10 @@ where
     fn get_id(&self) -> impl Into<String>;
 }
 
-// Implement the handler traits
-// The maximum of resource parameter will be 7
+//-- region: Implement the handler traits
 impl_handler!();
 impl_handler!(T1);
 impl_handler!(T1, T2);
 impl_handler!(T1, T2, T3);
 impl_handler!(T1, T2, T3, T4);
+//-- endregion: Implement the handler traits
