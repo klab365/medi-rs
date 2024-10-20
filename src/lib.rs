@@ -4,7 +4,7 @@ mod handler;
 mod resource;
 
 // flatten the module structure
-pub use self::error::{Error, Result};
+pub use error::*;
 pub use bus::*;
 pub use handler::*;
 pub use resource::*;

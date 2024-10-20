@@ -4,7 +4,7 @@ mod bus_builder;
 pub use bus_builder::BusBuilder;
 
 // -- use dependencies
-use crate::error::{Error, Result};
+use crate::error::{Error, HandlerResult};
 use crate::handler_wrapper::HandlerWrapperTrait;
 use crate::{FromResources, IntoCommand, IntoEvent, Resources, SharedHandler};
 use std::any::TypeId;
@@ -41,7 +41,7 @@ impl Bus {
         bus
     }
 
-    pub async fn send<Req, Res>(&self, req: Req) -> Result<Res>
+    pub async fn send<Req, Res>(&self, req: Req) -> HandlerResult<Res>
     where
         Req: IntoCommand<Res> + Send + Sync + 'static,
         Res: Send + Sync + 'static,
@@ -63,7 +63,7 @@ impl Bus {
         Ok(*res)
     }
 
-    pub async fn publish<Evt>(&self, evt: Evt) -> Result<()>
+    pub async fn publish<Evt>(&self, evt: Evt) -> HandlerResult<()>
     where
         Evt: IntoEvent + Send + Sync + 'static,
     {

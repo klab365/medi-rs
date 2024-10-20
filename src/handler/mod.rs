@@ -1,14 +1,14 @@
-mod handler_error;
+// mod handler_error;
 pub mod handler_wrapper;
 mod macros;
 
 // --flatten
-pub use handler_error::*;
+// pub use handler_error::*;
 use handler_wrapper::HandlerWrapper;
 use handler_wrapper::HandlerWrapperTrait;
 
 use crate::Resources;
-use crate::Result;
+use crate::HandlerResult;
 use std::sync::Arc;
 use std::{any::TypeId, collections::HashMap};
 
@@ -20,7 +20,7 @@ where
     Req: Send + Sync + 'static,
     Res: Send + Sync + 'static,
 {
-    type Future: std::future::Future<Output = Result<Res>> + Send + Sync + 'static;
+    type Future: std::future::Future<Output = HandlerResult<Res>> + Send + Sync + 'static;
 
     fn handle(self, resources: Resources, value: Req) -> Self::Future;
 

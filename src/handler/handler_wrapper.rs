@@ -2,7 +2,7 @@ use std::{any::Any, marker::PhantomData, pin::Pin};
 
 use crate::Error;
 use crate::Resources;
-use crate::Result;
+use crate::HandlerResult;
 
 use super::Handler;
 
@@ -26,7 +26,7 @@ pub(crate) trait HandlerWrapperTrait: Send + Sync {
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>>;
+    ) -> Pin<Box<dyn std::future::Future<Output = HandlerResult<Box<dyn Any + Send + Sync>>> + Send + Sync>>;
 }
 
 impl<H, TResource, Req, Res> HandlerWrapperTrait for HandlerWrapper<H, TResource, Req, Res>
@@ -40,7 +40,7 @@ where
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>> {
+    ) -> Pin<Box<dyn std::future::Future<Output = HandlerResult<Box<dyn Any + Send + Sync>>> + Send + Sync>> {
         let Ok(arg) = value.downcast::<Req>() else {
             return Box::pin(async { Err(Error::CastError) });
         };

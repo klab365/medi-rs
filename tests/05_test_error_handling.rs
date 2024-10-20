@@ -12,12 +12,9 @@ async fn send_should_return_error() {
     // assert
     match res {
         Ok(_) => panic!("Expected error, got {:?}", res),
-        Err(err) => match err {
-            medi_rs::Error::Handler(handler_error) => {
-                let my_error = handler_error.get::<Error>().unwrap();
-                assert!(matches!(my_error, Error::Basic(_)));
-            }
-            _ => panic!("Expected HandlerError, got {:?}", err),
+        Err(err) => {
+            let my_error = err.get_handler_error::<Error>().unwrap();
+            assert!(matches!(my_error, Error::Basic(_)));
         },
     }
 }

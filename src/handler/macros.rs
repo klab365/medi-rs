@@ -10,7 +10,7 @@ macro_rules! impl_handler {
             E: IntoHandlerError,
             Fut: std::future::Future<Output = core::result::Result<Res, E>> + Send + Sync + 'static,
         {
-            type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Res>> + Send + Sync>>;
+            type Future = std::pin::Pin<Box<dyn std::future::Future<Output = HandlerResult<Res>> + Send + Sync>>;
 
             #[allow(unused)]
             fn handle(self, resources: resource::Resources, value: Req) -> Self::Future {
