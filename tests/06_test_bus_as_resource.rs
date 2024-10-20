@@ -8,7 +8,9 @@ async fn send_call_second_req_test() {
         .build()
         .unwrap();
 
-    bus.send(CreateUser { name: "hello".into() }).await.unwrap();
+    let res = bus.send(CreateUser { name: "hello".into() }).await;
+
+    assert!(res.is_ok());
 }
 
 struct CreateUser {
