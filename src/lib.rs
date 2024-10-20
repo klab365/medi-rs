@@ -1,21 +1,33 @@
 mod bus;
 mod error;
-mod event;
 mod handler;
 mod resource;
 
 // flatten the module structure
 pub use self::error::{Error, Result};
 pub use bus::*;
-pub use event::*;
 pub use handler::*;
 pub use resource::*;
+use uuid::Uuid;
 
 /// IntoCommand trait will be used to mark command or query types for the bus
 pub trait IntoCommand<Res>
 where
     Self: Send + Sync + 'static,
 {
+}
+
+/// IntoEvent trait will be used to mark event types for the bus
+/// Each event should have an unique id
+pub trait IntoEvent: Clone
+where
+    Self: Send + Sync + 'static,
+{
+    /// Get the id of the event
+    /// Each event should have an unique id
+    fn get_id(&self) -> Uuid {
+        Uuid::new_v4()
+    }
 }
 
 // Implement the handler traits
