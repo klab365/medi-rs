@@ -1,4 +1,5 @@
 use medi_rs::{Bus, HandlerResult, IntoEvent};
+use uuid::Uuid;
 
 #[tokio::test]
 async fn publish_should_process_published_event() {
@@ -9,7 +10,7 @@ async fn publish_should_process_published_event() {
         .build()
         .unwrap();
 
-    let event = BaseEvent {};
+    let event = BaseEvent::new();
     let watch = std::time::Instant::now();
     let res = bus.publish(event).await;
     let duration = watch.elapsed();
@@ -19,8 +20,19 @@ async fn publish_should_process_published_event() {
 }
 
 #[derive(Clone)]
-struct BaseEvent;
-impl IntoEvent for BaseEvent {}
+struct BaseEvent(Uuid);
+
+impl BaseEvent {
+    fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+impl IntoEvent for BaseEvent {
+    fn get_id(&self) -> impl Into<String> {
+        self.0.to_string()
+    }
+}
 
 async fn base_event_handler1(_req: BaseEvent) -> HandlerResult<()> {
     println!("base_event_handler1");

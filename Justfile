@@ -12,9 +12,9 @@ build-docker id:
     docker build -t rust-toolchain -f .devcontainer/Dockerfile --build-arg UID={{ id }} .
 
 # build the code
-build:
+build *ARGS='':
     echo "Building..."
-    {{ CMD }} build
+    {{ CMD }} build {{ARGS}}
 
 # build for release
 release version='0.0.0' *ARGS='':

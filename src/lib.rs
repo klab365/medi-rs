@@ -3,12 +3,12 @@ mod error;
 mod handler;
 mod resource;
 
+
 // flatten the module structure
 pub use bus::*;
 pub use error::*;
 pub use handler::*;
 pub use resource::*;
-use uuid::Uuid;
 
 /// IntoCommand trait will be used to mark command or query types for the bus
 pub trait IntoCommand<Res>
@@ -25,9 +25,7 @@ where
 {
     /// Get the id of the event
     /// Each event should have an unique id
-    fn get_id(&self) -> Uuid {
-        Uuid::new_v4()
-    }
+    fn get_id(&self) -> impl Into<String>;
 }
 
 // Implement the handler traits
