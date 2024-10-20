@@ -7,8 +7,8 @@ mod macros;
 use handler_wrapper::HandlerWrapper;
 use handler_wrapper::HandlerWrapperTrait;
 
-use crate::Resources;
 use crate::HandlerResult;
+use crate::Resources;
 use std::sync::Arc;
 use std::{any::TypeId, collections::HashMap};
 

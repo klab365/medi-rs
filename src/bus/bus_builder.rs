@@ -1,5 +1,5 @@
 use crate::{handler_wrapper::HandlerWrapperTrait, FromResources, Handler, IntoCommand, IntoEvent, SharedHandler};
-use crate::{Resources, HandlerResult};
+use crate::{HandlerResult, Resources};
 use std::any::TypeId;
 use std::sync::Arc;
 

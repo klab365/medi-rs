@@ -4,8 +4,8 @@ mod handler;
 mod resource;
 
 // flatten the module structure
-pub use error::*;
 pub use bus::*;
+pub use error::*;
 pub use handler::*;
 pub use resource::*;
 use uuid::Uuid;

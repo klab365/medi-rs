@@ -13,9 +13,9 @@ async fn send_should_return_error() {
     match res {
         Ok(_) => panic!("Expected error, got {:?}", res),
         Err(err) => {
-            let my_error = err.get_handler_error::<Error>().unwrap();
-            assert!(matches!(my_error, Error::Basic(_)));
-        },
+            let my_error = err.get_handler_error::<CustomError>().unwrap();
+            assert!(matches!(my_error, CustomError::Basic(_)));
+        }
     }
 }
 
@@ -51,12 +51,12 @@ async fn send_should_return_error_when_no_resource_found() {
     }
 }
 
-async fn error_handler(_req: BasicRequest) -> Result<(), Error> {
-    Err(Error::Basic("Error".to_string()))
+async fn error_handler(_req: BasicRequest) -> Result<(), CustomError> {
+    Err(CustomError::Basic("Error".to_string()))
 }
 
-async fn error_handler1(_state: AppState, _req: BasicRequest) -> Result<(), Error> {
-    Err(Error::Basic("Error".to_string()))
+async fn error_handler1(_state: AppState, _req: BasicRequest) -> Result<(), CustomError> {
+    Err(CustomError::Basic("Error".to_string()))
 }
 
 #[derive(Debug, Clone)]
@@ -69,7 +69,7 @@ struct BasicRequest;
 impl IntoCommand<()> for BasicRequest {}
 
 #[derive(thiserror::Error, Debug)]
-enum Error {
+enum CustomError {
     #[error("Error")]
     Basic(String),
 
@@ -77,4 +77,4 @@ enum Error {
     BusError(#[from] medi_rs::Error),
 }
 
-impl IntoHandlerError for Error {}
+impl IntoHandlerError for CustomError {}

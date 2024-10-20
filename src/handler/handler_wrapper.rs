@@ -1,8 +1,8 @@
 use std::{any::Any, marker::PhantomData, pin::Pin};
 
 use crate::Error;
-use crate::Resources;
 use crate::HandlerResult;
+use crate::Resources;
 
 use super::Handler;
 
