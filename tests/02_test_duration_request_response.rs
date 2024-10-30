@@ -1,8 +1,8 @@
-use medi_rs::{BusBuilder, HandlerResult, IntoReq};
+use medi_rs::{BusBuilder, HandlerResult, IntoCommand};
 
 #[tokio::test]
 async fn send_should_take_less_than_1ms() {
-    let bus = BusBuilder::default().add_req_handler(print_ping).build();
+    let bus = BusBuilder::default().add_req_handler(print_ping).build().unwrap();
 
     let watch = std::time::Instant::now();
     let pong = bus.send(Ping("Ping".to_string())).await.unwrap();
@@ -19,4 +19,4 @@ async fn print_ping(ping: Ping) -> HandlerResult<String> {
 }
 
 struct Ping(String);
-impl IntoReq<String> for Ping {}
+impl IntoCommand<String> for Ping {}

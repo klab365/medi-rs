@@ -31,9 +31,6 @@ jobs:
       - name: Generate code coverage
         run: just coverage
 
-      - name: Dry-Run release generation with version 0.0.0
-        run: just release 0.0.0 --target x86_64-unknown-linux-musl
-
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v1
         with:

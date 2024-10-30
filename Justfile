@@ -12,9 +12,9 @@ build-docker id:
     docker build -t rust-toolchain -f .devcontainer/Dockerfile --build-arg UID={{ id }} .
 
 # build the code
-build:
+build *ARGS='':
     echo "Building..."
-    {{ CMD }} build
+    {{ CMD }} build {{ARGS}}
 
 # build for release
 release version='0.0.0' *ARGS='':
@@ -37,9 +37,9 @@ lint:
     {{ CMD }} clippy --all-targets --all-features -- -D warnings
 
 # fix the code
-fix:
+fix *ARGS:
     echo "Fixing..."
-    {{ CMD }} fix --allow-staged
+    {{ CMD }} fix --allow-staged {{ARGS}}
 
 # run the tests
 test:

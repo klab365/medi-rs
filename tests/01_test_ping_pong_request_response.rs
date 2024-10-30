@@ -1,9 +1,12 @@
-use medi_rs::{BusBuilder, HandlerResult, IntoReq};
+use medi_rs::{BusBuilder, HandlerResult, IntoCommand};
 use std::sync::Arc;
 
 #[tokio::test]
 async fn send_should_return_correct_pong() {
-    let bus = BusBuilder::default().add_req_handler(print_ping).build();
+    let bus = BusBuilder::default()
+        .add_req_handler(print_ping)
+        .build()
+        .expect("Failed to build bus");
 
     let pong = bus.send(Ping("Ping".to_string())).await.unwrap();
 
@@ -12,7 +15,7 @@ async fn send_should_return_correct_pong() {
 
 #[tokio::test]
 async fn send_should_return_correct_multiple_pong_without_multithreading() {
-    let bus = BusBuilder::default().add_req_handler(print_ping).build();
+    let bus = BusBuilder::default().add_req_handler(print_ping).build().unwrap();
 
     let pong = bus.send(Ping("Ping".to_string())).await.unwrap();
     assert_eq!(pong.0, "Pong: Ping");
@@ -23,7 +26,7 @@ async fn send_should_return_correct_multiple_pong_without_multithreading() {
 
 #[tokio::test]
 async fn send_should_return_correct_return_values_when_multithreading() {
-    let bus = BusBuilder::default().add_req_handler(print_ping).build();
+    let bus = BusBuilder::default().add_req_handler(print_ping).build().unwrap();
 
     let mut handlers = vec![];
     let bus = Arc::new(bus);
@@ -50,7 +53,7 @@ async fn print_ping(id: Ping) -> HandlerResult<Pong> {
 }
 
 struct Ping(String);
-impl IntoReq<Pong> for Ping {}
+impl IntoCommand<Pong> for Ping {}
 
 #[derive(Debug)]
 struct Pong(String);

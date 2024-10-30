@@ -1,8 +1,8 @@
 use std::{any::Any, marker::PhantomData, pin::Pin};
 
 use crate::Error;
+use crate::HandlerResult;
 use crate::Resources;
-use crate::Result;
 
 use super::Handler;
 
@@ -26,7 +26,7 @@ pub(crate) trait HandlerWrapperTrait: Send + Sync {
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>>;
+    ) -> Pin<Box<dyn std::future::Future<Output = HandlerResult<Box<dyn Any + Send + Sync>>> + Send + Sync>>;
 }
 
 impl<H, TResource, Req, Res> HandlerWrapperTrait for HandlerWrapper<H, TResource, Req, Res>
@@ -40,9 +40,10 @@ where
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>> {
+    ) -> Pin<Box<dyn std::future::Future<Output = HandlerResult<Box<dyn Any + Send + Sync>>> + Send + Sync>> {
         let Ok(arg) = value.downcast::<Req>() else {
-            return Box::pin(async { Err(Error::CastError) });
+            let type_name = std::any::type_name::<Req>();
+            return Box::pin(async { Err(Error::CastError(type_name.to_string())) });
         };
 
         let handler = self.handler.clone();
@@ -51,5 +52,43 @@ where
             let res = fut.await?;
             Ok(Box::new(res) as Box<dyn Any + Send + Sync>)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use crate::IntoCommand;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_cast_error_when_wrong_req_is_passed() {
+        let handler = add_req_handler(test_handler);
+        let resources = Resources::default();
+
+        let wrong_req = Box::new(1);
+        let res = handler.handle(resources, wrong_req).await;
+
+        assert!(res.is_err());
+        assert!(matches!(res.unwrap_err(), Error::CastError(_)));
+    }
+
+    struct BaseReq;
+    impl IntoCommand<()> for BaseReq {}
+
+    async fn test_handler(_req: BaseReq) -> HandlerResult<()> {
+        Ok(())
+    }
+
+    pub fn add_req_handler<H, T, Req, Res>(h: H) -> Arc<dyn HandlerWrapperTrait + Send + Sync + 'static>
+    where
+        H: Handler<T, Req, Res> + Sync + Send + 'static,
+        T: Sync + Send + 'static,
+        Req: IntoCommand<Res> + Sync + Send + 'static,
+        Res: Sync + Send + 'static,
+    {
+        h.into_dyn()
     }
 }
