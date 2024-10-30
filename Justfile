@@ -16,11 +16,11 @@ build *ARGS='':
     echo "Building..."
     {{ CMD }} build {{ARGS}}
 
-# build for release
-release version='0.0.0' *ARGS='':
+# publish
+publish version='0.0.0' *ARGS='':
     echo "Building for release V{{ version }}"
-    sed -i 's/^version = ".*"$/version = "{{ version }}"/' Cargo.toml
-    {{ CMD }} build --release {{ARGS}}
+    sed -i 's/version = "[0-9.]*"$/version = "{{version}}"/' Cargo.toml
+    {{ CMD }} publish --allow-dirty {{ARGS}}
 
 check-format:
     echo "Checking formatting..."
@@ -50,9 +50,3 @@ test:
 coverage:
     echo "Generating coverage..."
     {{ CMD }} llvm-cov --lcov --output-path lcov.info
-
-# run the example
-example:
-    echo "Running example..."
-    rm -rf target/new_project
-    {{ CMD_TTY }} run -- template generate local -t assets/example_project -d target/new_project
