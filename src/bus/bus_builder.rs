@@ -1,12 +1,15 @@
-use crate::{handler_wrapper::HandlerWrapperTrait, FromResources, Handler, IntoReq, ResourcesBuilder, SharedHandler};
+use crate::{handler_wrapper::HandlerWrapperTrait, FromResources, Handler, IntoCommand, IntoEvent, SharedHandler};
+use crate::{HandlerResult, Resources};
 use std::any::TypeId;
+use std::sync::Arc;
 
 use super::Bus;
 
 #[derive(Default)]
 pub struct BusBuilder {
-    req_handlers: SharedHandler<Box<dyn HandlerWrapperTrait>>,
-    resource_builder: ResourcesBuilder,
+    req_handlers: SharedHandler<Arc<dyn HandlerWrapperTrait>>,
+    evt_handlers: SharedHandler<Vec<Arc<dyn HandlerWrapperTrait>>>,
+    resources: Resources,
 }
 
 impl BusBuilder {
@@ -14,7 +17,7 @@ impl BusBuilder {
     where
         H: Handler<T, Req, Res> + Sync + Send + 'static,
         T: Sync + Send + 'static,
-        Req: IntoReq<Res> + Sync + Send + 'static,
+        Req: IntoCommand<Res> + Sync + Send + 'static,
         Res: Sync + Send + 'static,
     {
         let type_id = TypeId::of::<Req>();
@@ -29,15 +32,32 @@ impl BusBuilder {
         self
     }
 
+    pub fn add_event_handler<H, T, Evt>(mut self, h: H) -> Self
+    where
+        H: Handler<T, Evt, ()> + Sync + Send + 'static,
+        T: Sync + Send + 'static,
+        Evt: IntoEvent + Sync + Send + 'static,
+    {
+        let type_id = TypeId::of::<Evt>();
+
+        self.evt_handlers.entry(type_id).or_default();
+        let handlers = self.evt_handlers.get_mut(&type_id).unwrap();
+        handlers.push(h.into_dyn());
+
+        self
+    }
+
     pub fn append_resources<T>(mut self, value: T) -> Self
     where
         T: FromResources + Clone + Send + Sync + 'static,
     {
-        self.resource_builder.insert(value);
+        self.resources.insert(value);
         self
     }
 
-    pub fn build(self) -> Bus {
-        Bus::new(self.resource_builder.build(), self.req_handlers)
+    pub fn build(self) -> HandlerResult<Bus> {
+        let bus = Bus::new(self.resources, self.req_handlers, self.evt_handlers);
+
+        Ok(bus)
     }
 }
