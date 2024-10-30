@@ -1,7 +1,15 @@
 [package]
 name = "medi-rs"
-version = "0.1.0"
+description = "A yet another mediator library for Rust"
+version = "0.0.0"
 edition = "2021"
+authors = ["Burak <burak.kizilkaya@outlook.com>"]
+license = "MIT"
+homepage = "https://github.com/klab365/medi-rs"
+repository = "https://github.com/klab365/medi-rs"
+keywords = ["mediator"]
+readme = "Readme.md"
+
 
 [dependencies]
 thiserror = "1.0.64"
