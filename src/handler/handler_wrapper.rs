@@ -26,7 +26,7 @@ pub(crate) trait HandlerWrapperTrait: Send + Sync {
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>>;
+    ) -> Pin<Box<dyn futures::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send>>;
 }
 
 impl<H, TResource, Req, Res> HandlerWrapperTrait for HandlerWrapper<H, TResource, Req, Res>
@@ -40,7 +40,7 @@ where
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>> {
+    ) -> Pin<Box<dyn futures::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send>> {
         let Ok(arg) = value.downcast::<Req>() else {
             let type_name = std::any::type_name::<Req>();
             return Box::pin(async { Err(Error::CastError(type_name.to_string())) });

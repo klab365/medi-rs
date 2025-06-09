@@ -12,10 +12,11 @@ readme = "Readme.md"
 
 
 [dependencies]
+futures = "0.3.31"
 thiserror = "1.0.64"
 tokio = {version = "1.40.0", features = ["full"]}
 
 [dev-dependencies]
 rand = "0.8.5"
 anyhow = "1.0.98"
-
+async-trait = "0.1.88"
