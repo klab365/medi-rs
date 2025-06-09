@@ -1,8 +1,8 @@
 use std::{any::Any, marker::PhantomData, pin::Pin};
 
 use crate::Error;
-use crate::HandlerResult;
 use crate::Resources;
+use crate::Result;
 
 use super::Handler;
 
@@ -26,7 +26,7 @@ pub(crate) trait HandlerWrapperTrait: Send + Sync {
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = HandlerResult<Box<dyn Any + Send + Sync>>> + Send + Sync>>;
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>>;
 }
 
 impl<H, TResource, Req, Res> HandlerWrapperTrait for HandlerWrapper<H, TResource, Req, Res>
@@ -40,7 +40,7 @@ where
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = HandlerResult<Box<dyn Any + Send + Sync>>> + Send + Sync>> {
+    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>> {
         let Ok(arg) = value.downcast::<Req>() else {
             let type_name = std::any::type_name::<Req>();
             return Box::pin(async { Err(Error::CastError(type_name.to_string())) });
@@ -78,7 +78,7 @@ mod tests {
     struct BaseReq;
     impl IntoCommand<()> for BaseReq {}
 
-    async fn test_handler(_req: BaseReq) -> HandlerResult<()> {
+    async fn test_handler(_req: BaseReq) -> Result<()> {
         Ok(())
     }
 

@@ -2,7 +2,7 @@
 name = "medi-rs"
 description = "A yet another mediator library for Rust"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 authors = ["Burak <burak.kizilkaya@outlook.com>"]
 license = "MIT"
 homepage = "https://github.com/klab365/medi-rs"
@@ -17,4 +17,5 @@ tokio = {version = "1.40.0", features = ["full"]}
 
 [dev-dependencies]
 rand = "0.8.5"
+anyhow = "1.0.98"
 

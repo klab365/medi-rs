@@ -9,17 +9,12 @@ pub struct Resources {
 
 impl Resources {
     pub fn get<T: Clone + Send + Sync + 'static>(&self) -> Option<T> {
-        let map = self.map.as_ref()?;
-        let res = map.get(&TypeId::of::<T>());
-        let res = res?;
-        let res = res.downcast_ref::<T>();
-        let res = res?;
-        Some(res.clone())
+        self.map.as_ref()?.get(&TypeId::of::<T>())?.downcast_ref::<T>().cloned()
     }
 
     pub(crate) fn insert<T: Clone + Send + Sync + 'static>(&mut self, value: T) {
         self.map
-            .get_or_insert(AnyMap::new())
+            .get_or_insert_with(AnyMap::new)
             .insert(TypeId::of::<T>(), Arc::new(value));
     }
 }

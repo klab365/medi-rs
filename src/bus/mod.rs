@@ -5,7 +5,7 @@ pub use bus_builder::BusBuilder;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 // -- use dependencies
-use crate::error::{Error, HandlerResult};
+use crate::error::{Error, Result};
 use crate::event::{EventWrapper, EventWrapperTrait};
 use crate::handler_wrapper::HandlerWrapperTrait;
 use crate::{FromResources, IntoCommand, IntoEvent, Resources, SharedHandler};
@@ -53,7 +53,7 @@ impl Bus {
         bus
     }
 
-    pub async fn send<Req, Res>(&self, req: Req) -> HandlerResult<Res>
+    pub async fn send<Req, Res>(&self, req: Req) -> Result<Res>
     where
         Req: IntoCommand<Res> + Send + Sync + 'static,
         Res: Send + Sync + 'static,
@@ -76,7 +76,8 @@ impl Bus {
         Ok(*res)
     }
 
-    pub async fn publish<Evt>(&self, evt: Evt) -> HandlerResult<()>
+    /// Publish an event without waiting for handlers to complete (fire-and-forget)
+    pub async fn publish<Evt>(&self, evt: Evt) -> Result<()>
     where
         Evt: IntoEvent + Clone + Send + Sync + 'static,
     {
@@ -85,7 +86,7 @@ impl Bus {
         self.pending_events
             .send(event_item)
             .await
-            .map_err(|_| Error::EventProcessingError)?;
+            .map_err(|_| Error::EventPublishingError)?;
 
         Ok(())
     }
@@ -93,12 +94,13 @@ impl Bus {
     fn start_processing_events(&self, rx: Receiver<EventQueueItem>) {
         let bus = self.clone();
         tokio::spawn(async move {
-            test_loop(Arc::new(bus), rx).await;
+            process_event_loop(Arc::new(bus), rx).await;
         });
     }
 }
 
-async fn test_loop(bus: Arc<Bus>, mut rx: Receiver<EventQueueItem>) {
+/// Processes the event loop, handling events as they come in.
+async fn process_event_loop(bus: Arc<Bus>, mut rx: Receiver<EventQueueItem>) {
     while let Some(event_item) = rx.recv().await {
         let event_item_type = event_item.get_type_id();
         let Some(handlers) = bus.evt_handlers.get(&event_item_type) else {
@@ -106,11 +108,24 @@ async fn test_loop(bus: Arc<Bus>, mut rx: Receiver<EventQueueItem>) {
             continue;
         };
 
+        // Process handlers concurrently for better performance
+        let mut tasks = Vec::with_capacity(handlers.len());
         for handler in handlers {
             let evt = event_item.get_any();
-            let res = handler.handle(bus.resources.clone(), evt).await;
-            if let Err(e) = res {
-                eprintln!("Error: {:?}", e);
+            let handler = handler.clone();
+            let resources = bus.resources.clone();
+            let task = tokio::spawn(async move {
+                if let Err(e) = handler.handle(resources, evt).await {
+                    eprintln!("Error: {:?}", e);
+                }
+            });
+            tasks.push(task);
+        }
+
+        // Wait for all handlers to complete
+        for task in tasks {
+            if let Err(e) = task.await {
+                eprintln!("Task error: {:?}", e);
             }
         }
     }

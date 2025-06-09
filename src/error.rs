@@ -19,11 +19,14 @@ pub enum Error {
 
     #[error("Event Processing Error")]
     EventProcessingError,
+
+    #[error("Event Publishing Error")]
+    EventPublishingError,
 }
 
 /// Handler result type
 /// This is a wrapper around the result type with the error type as the handler error
-pub type HandlerResult<T> = core::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 impl Error {
     /// Get the handler error if it is a handler error
@@ -35,29 +38,18 @@ impl Error {
     }
 }
 
-/// Trait to convert a type into a handler error
-pub trait IntoHandlerError
-where
-    Self: std::error::Error + Sized + Send + Sync + 'static,
-{
-    fn into_handler_error(self) -> Error {
-        Error::Handler(Box::new(self))
-    }
-}
-
-impl IntoHandlerError for Error {}
-
 #[cfg(test)]
 mod tests {
-    use tokio::sync::broadcast::error;
-
     use super::*;
+
+    #[derive(Debug, thiserror::Error)]
+    enum TestError {}
 
     #[test]
     fn test_get_handler_error_should_return_none() {
         let error = Error::HandlerNotFound;
 
-        let handler_error = error.get_handler_error::<error::RecvError>();
+        let handler_error = error.get_handler_error::<TestError>();
 
         assert!(handler_error.is_none());
     }

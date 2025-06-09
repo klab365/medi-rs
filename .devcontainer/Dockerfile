@@ -7,7 +7,7 @@ RUN usermod -u $UID vscode
 USER vscode
 
 # Install rust version and components
-RUN rustup default 1.80
+RUN rustup default 1.86
 RUN rustup target add x86_64-unknown-linux-musl
 RUN rustup component add rustfmt
 RUN rustup component add clippy

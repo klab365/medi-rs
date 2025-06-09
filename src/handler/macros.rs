@@ -7,10 +7,10 @@ macro_rules! impl_handler {
             Req: Sync + Send + 'static,
             Res: Sync + Send + 'static,
             $($T: FromResources + Clone + Send + Sync + 'static,)*
-            E: IntoHandlerError,
+            E: std::error::Error + Sized + Send + Sync + 'static,
             Fut: std::future::Future<Output = core::result::Result<Res, E>> + Send + Sync + 'static,
         {
-            type Future = std::pin::Pin<Box<dyn std::future::Future<Output = HandlerResult<Res>> + Send + Sync>>;
+            type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Res>> + Send + Sync>>;
 
             #[allow(unused)]
             fn handle(self, resources: resource::Resources, value: Req) -> Self::Future {
@@ -21,8 +21,8 @@ macro_rules! impl_handler {
                     match res {
                         Ok(res) => Ok(res),
                         Err(e) => {
-                            let he = IntoHandlerError::into_handler_error(e);
-                            Err(he.into())
+                            let he = Error::Handler(Box::new(e));
+                            Err(he)
                         }
                     }
                 })

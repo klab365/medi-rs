@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use medi_rs::{Bus, FromResources, HandlerResult, IntoEvent};
+use medi_rs::{Bus, FromResources, IntoEvent, Result};
 
 #[tokio::test]
 async fn publish_should_process_published_event() {
@@ -46,17 +46,17 @@ impl InMemoryMsgQueue {
     }
 }
 
-async fn base_event_handler1(queue: InMemoryMsgQueue, _req: BaseEvent) -> HandlerResult<()> {
+async fn base_event_handler1(queue: InMemoryMsgQueue, _req: BaseEvent) -> Result<()> {
     queue.0.lock().unwrap().push("base_event_handler1".to_string());
     Ok(())
 }
 
-async fn base_event_handler2(queue: InMemoryMsgQueue, _req: BaseEvent) -> HandlerResult<()> {
+async fn base_event_handler2(queue: InMemoryMsgQueue, _req: BaseEvent) -> Result<()> {
     queue.0.lock().unwrap().push("base_event_handler2".to_string());
     Ok(())
 }
 
-async fn base_event_handler3(queue: InMemoryMsgQueue, _req: BaseEvent) -> HandlerResult<()> {
+async fn base_event_handler3(queue: InMemoryMsgQueue, _req: BaseEvent) -> Result<()> {
     queue.0.lock().unwrap().push("base_event_handler3".to_string());
     Ok(())
 }

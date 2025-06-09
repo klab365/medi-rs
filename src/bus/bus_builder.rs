@@ -1,5 +1,5 @@
-use crate::{handler_wrapper::HandlerWrapperTrait, FromResources, Handler, IntoCommand, IntoEvent, SharedHandler};
-use crate::{HandlerResult, Resources};
+use crate::{FromResources, Handler, IntoCommand, IntoEvent, SharedHandler, handler_wrapper::HandlerWrapperTrait};
+use crate::{Resources, Result};
 use std::any::TypeId;
 use std::sync::Arc;
 
@@ -55,7 +55,7 @@ impl BusBuilder {
         self
     }
 
-    pub fn build(self) -> HandlerResult<Bus> {
+    pub fn build(self) -> Result<Bus> {
         let bus = Bus::new(self.resources, self.req_handlers, self.evt_handlers);
 
         Ok(bus)

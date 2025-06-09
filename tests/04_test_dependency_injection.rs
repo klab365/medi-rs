@@ -1,5 +1,5 @@
 use medi_rs::{
-    BusBuilder, FromResources, {HandlerResult, IntoCommand},
+    BusBuilder, FromResources, {IntoCommand, Result},
 };
 use std::sync::{Arc, Mutex};
 
@@ -37,13 +37,13 @@ async fn send_should_work_with_generic_dependencyinjection() {
     assert_eq!(users[0].name, "John");
 }
 
-async fn create_user_dyn(state: AppStateDyn, req: CreateUser) -> HandlerResult<()> {
+async fn create_user_dyn(state: AppStateDyn, req: CreateUser) -> Result<()> {
     let user = User { name: req.name };
     state.user_repository.save(user)?;
     Ok(())
 }
 
-async fn create_user_generic(state: AppStateGeneric<InMemoryUserRepository>, req: CreateUser) -> HandlerResult<()> {
+async fn create_user_generic(state: AppStateGeneric<InMemoryUserRepository>, req: CreateUser) -> Result<()> {
     let user = User { name: req.name };
     state.user_repository.save(user)?;
     Ok(())
@@ -60,7 +60,7 @@ struct User {
 }
 
 trait UserRepository: Send + Sync {
-    fn save(&self, user: User) -> HandlerResult<()>;
+    fn save(&self, user: User) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -73,7 +73,7 @@ impl InMemoryUserRepository {
 }
 
 impl UserRepository for InMemoryUserRepository {
-    fn save(&self, user: User) -> HandlerResult<()> {
+    fn save(&self, user: User) -> Result<()> {
         self.0.lock().unwrap().push(user);
         Ok(())
     }

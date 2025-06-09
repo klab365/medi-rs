@@ -1,4 +1,4 @@
-use medi_rs::{Bus, HandlerResult, IntoCommand};
+use medi_rs::{Bus, IntoCommand, Result};
 
 #[tokio::test]
 async fn send_call_second_req_test() {
@@ -24,13 +24,13 @@ struct ValidateUser {
 impl IntoCommand<()> for ValidateUser {}
 
 // handler functions...
-async fn create_user_dyn(bus: Bus, req: CreateUser) -> HandlerResult<()> {
+async fn create_user_dyn(bus: Bus, req: CreateUser) -> Result<()> {
     println!("Creating user: {}", req.name);
     bus.send(ValidateUser { name: req.name }).await?;
     Ok(())
 }
 
-async fn validate_user(req: ValidateUser) -> HandlerResult<()> {
+async fn validate_user(req: ValidateUser) -> Result<()> {
     println!("Validating user: {}", req.name);
     Ok(())
 }
