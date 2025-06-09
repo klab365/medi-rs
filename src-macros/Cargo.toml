@@ -1,0 +1,15 @@
+[package]
+name = "medi-rs-macros"
+description = "A macro library for medi-rs"
+version = "0.0.0"
+edition = "2024"
+
+[dependencies]
+quote = "1.0.40"
+syn = { version = "2.0.101", features = ["full"] }
+
+[lints]
+workspace = true
+
+[lib]
+proc-macro = true

@@ -10,11 +10,17 @@ repository = "https://github.com/klab365/medi-rs"
 keywords = ["mediator"]
 readme = "Readme.md"
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace]
+members = [".", "src-macros"]
 
 [dependencies]
 futures = "0.3.31"
 thiserror = "1.0.64"
 tokio = {version = "1.40.0", features = ["full"]}
+medi-rs-macros = { path = "src-macros" }
 
 [dev-dependencies]
 rand = "0.8.5"

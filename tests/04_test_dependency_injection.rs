@@ -1,6 +1,7 @@
 use medi_rs::{
     BusBuilder, FromResources, {IntoCommand, Result},
 };
+use medi_rs_macros::MediRessource;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -79,7 +80,7 @@ impl UserRepository for InMemoryUserRepository {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, MediRessource)]
 struct AppStateDyn {
     user_repository: Arc<dyn UserRepository>,
 }
@@ -88,9 +89,8 @@ impl AppStateDyn {
         Self { user_repository }
     }
 }
-impl FromResources for AppStateDyn {}
 
-#[derive(Clone)]
+#[derive(Clone, MediRessource)]
 struct AppStateGeneric<T: UserRepository> {
     user_repository: Arc<T>,
 }
@@ -99,4 +99,3 @@ impl<T: UserRepository> AppStateGeneric<T> {
         Self { user_repository }
     }
 }
-impl<T: UserRepository> FromResources for AppStateGeneric<T> {}
