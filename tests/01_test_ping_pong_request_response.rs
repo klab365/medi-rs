@@ -1,4 +1,4 @@
-use medi_rs::{BusBuilder, HandlerResult, IntoCommand};
+use medi_rs::{BusBuilder, IntoCommand, Result};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -48,7 +48,7 @@ async fn send_should_return_correct_return_values_when_multithreading() {
     }
 }
 
-async fn print_ping(id: Ping) -> HandlerResult<Pong> {
+async fn print_ping(id: Ping) -> Result<Pong> {
     Ok(Pong(format!("Pong: {}", id.0)))
 }
 

@@ -1,8 +1,8 @@
 use super::resources::Resources;
-use crate::error::{Error, HandlerResult};
+use crate::error::{Error, Result};
 
 pub trait FromResources {
-    fn from_resources(resources: &Resources) -> HandlerResult<Self>
+    fn from_resources(resources: &Resources) -> Result<Self>
     where
         Self: Sized + Clone + Send + Sync + 'static,
     {

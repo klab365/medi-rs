@@ -1,4 +1,4 @@
-use medi_rs::{BusBuilder, HandlerResult, IntoCommand};
+use medi_rs::{BusBuilder, IntoCommand, Result};
 
 #[tokio::test]
 async fn send_should_take_less_than_1ms() {
@@ -14,7 +14,7 @@ async fn send_should_take_less_than_1ms() {
     assert!(duration.as_millis() < 1); // the call should take less than 1ms
 }
 
-async fn print_ping(ping: Ping) -> HandlerResult<String> {
+async fn print_ping(ping: Ping) -> Result<String> {
     Ok(format!("Pong: {}", ping.0))
 }
 

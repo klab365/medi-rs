@@ -1,6 +1,4 @@
-use medi_rs::{
-    Bus, FromResources, {IntoCommand, IntoHandlerError},
-};
+use medi_rs::{Bus, FromResources, IntoCommand};
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -14,7 +12,11 @@ async fn send_should_return_error() {
         Ok(_) => panic!("Expected error, got {:?}", res),
         Err(err) => {
             let my_error = err.get_handler_error::<CustomError>().unwrap();
-            assert!(matches!(my_error, CustomError::Basic(_)));
+
+            match my_error {
+                CustomError::Basic(content) => assert_eq!(content, "Error1"),
+                _ => panic!("Expected CustomError::Basic, got {:?}", my_error),
+            }
         }
     }
 }
@@ -52,11 +54,11 @@ async fn send_should_return_error_when_no_resource_found() {
 }
 
 async fn error_handler(_req: BasicRequest) -> Result<(), CustomError> {
-    Err(CustomError::Basic("Error".to_string()))
+    Err(CustomError::Basic("Error1".to_string()))
 }
 
 async fn error_handler1(_state: AppState, _req: BasicRequest) -> Result<(), CustomError> {
-    Err(CustomError::Basic("Error".to_string()))
+    Err(CustomError::Basic("Error2".to_string()))
 }
 
 #[derive(Debug, Clone)]
@@ -76,5 +78,3 @@ enum CustomError {
     #[error("Bus error")]
     BusError(#[from] medi_rs::Error),
 }
-
-impl IntoHandlerError for CustomError {}

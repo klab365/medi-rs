@@ -1,6 +1,6 @@
 use medi_rs::BusBuilder;
 use medi_rs::FromResources;
-use medi_rs::{HandlerResult, IntoCommand};
+use medi_rs::{IntoCommand, Result};
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -35,7 +35,7 @@ impl AppState {
     }
 }
 
-async fn print_ping(state: AppState, req: Ping) -> HandlerResult<()> {
+async fn print_ping(state: AppState, req: Ping) -> Result<()> {
     state.list.lock().unwrap().push(req.0);
     Ok(())
 }
