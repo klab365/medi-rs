@@ -20,24 +20,32 @@ pub fn derive_medi_command_inner(input: proc_macro::TokenStream) -> proc_macro::
 
 fn extract_return_type(attrs: &[Attribute]) -> Option<Type> {
     for attr in attrs {
-        if attr.path().is_ident("medi_command") {
-            if let Meta::List(meta_list) = &attr.meta {
-                // Parse the attribute arguments manually from tokens
-                let tokens = &meta_list.tokens;
-                let tokens_str = tokens.to_string();
+        if !attr.path().is_ident("medi_command") {
+            continue;
+        }
 
-                // Look for "return_type = TypeName" pattern (without quotes)
-                if let Some(eq_pos) = tokens_str.find('=') {
-                    let key = tokens_str[..eq_pos].trim();
-                    if key == "return_type" {
-                        let type_str = tokens_str[eq_pos + 1..].trim();
-                        // Parse the type string directly
-                        if let Ok(ty) = syn::parse_str::<Type>(type_str) {
-                            return Some(ty);
-                        }
-                    }
-                }
-            }
+        let Meta::List(meta_list) = &attr.meta else {
+            continue;
+        };
+
+        // Parse the attribute arguments manually from tokens
+        let tokens = &meta_list.tokens;
+        let tokens_str = tokens.to_string();
+
+        // Look for "return_type = TypeName" pattern (without quotes)
+        let Some(eq_pos) = tokens_str.find('=') else {
+            continue;
+        };
+
+        let key = tokens_str[..eq_pos].trim();
+        if key != "return_type" {
+            continue;
+        }
+
+        let type_str = tokens_str[eq_pos + 1..].trim();
+        // Parse the type string directly
+        if let Ok(ty) = syn::parse_str::<Type>(type_str) {
+            return Some(ty);
         }
     }
     None
