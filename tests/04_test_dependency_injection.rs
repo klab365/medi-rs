@@ -1,7 +1,7 @@
 use medi_rs::{
     BusBuilder, FromResources, {IntoCommand, Result},
 };
-use medi_rs_macros::MediRessource;
+use medi_rs_macros::{MediCommand, MediRessource};
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -51,10 +51,10 @@ async fn create_user_generic(state: AppStateGeneric<InMemoryUserRepository>, req
 }
 
 /// Request to create a user
+#[derive(MediCommand)]
 struct CreateUser {
     name: String,
 }
-impl IntoCommand<()> for CreateUser {}
 
 struct User {
     name: String,

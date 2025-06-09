@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use medi_rs::{Bus, FromResources, IntoEvent, Result};
+use medi_rs_macros::MediEvent;
 
 #[tokio::test]
 async fn publish_should_process_published_event() {
@@ -27,9 +28,8 @@ async fn publish_should_process_published_event() {
     assert!(res2.is_ok());
 }
 
-#[derive(Clone)]
+#[derive(Clone, MediEvent)]
 struct BaseEvent;
-impl IntoEvent for BaseEvent {}
 
 /// In-memory message queue for testing, if events are processed with the handlers
 /// The order is not so important, but the handlers should be called

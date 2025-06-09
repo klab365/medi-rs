@@ -1,11 +1,8 @@
 mod functions;
 
-use functions::{
-    derive_medi_command_inner, derive_medi_event_inner, derive_medi_ressource_inner,
-};
+use functions::{derive_medi_command_inner, derive_medi_event_inner, derive_medi_ressource_inner};
 
-
-#[proc_macro_derive(MediCommand)]
+#[proc_macro_derive(MediCommand, attributes(medi_command))]
 pub fn derive_medi_command(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     derive_medi_command_inner(input)
 }

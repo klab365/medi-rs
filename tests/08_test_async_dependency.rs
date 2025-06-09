@@ -1,4 +1,5 @@
 use medi_rs::{Bus, BusBuilder, FromResources, IntoCommand, IntoEvent, Result};
+use medi_rs_macros::MediEvent;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -42,11 +43,10 @@ struct CreateUser {
 }
 impl IntoCommand<()> for CreateUser {}
 
-#[derive(Clone)]
+#[derive(Clone, MediEvent)]
 struct UserCreatedEvent {
     name: String,
 }
-impl IntoEvent for UserCreatedEvent {}
 
 struct User {
     name: String,
