@@ -59,6 +59,8 @@ where
 mod tests {
     use std::sync::Arc;
 
+    use medi_rs_macros::MediCommand;
+
     use crate::IntoCommand;
 
     use super::*;
@@ -75,8 +77,8 @@ mod tests {
         assert!(matches!(res.unwrap_err(), Error::CastError(_)));
     }
 
+    #[derive(MediCommand)]
     struct BaseReq;
-    impl IntoCommand<()> for BaseReq {}
 
     async fn test_handler(_req: BaseReq) -> Result<()> {
         Ok(())

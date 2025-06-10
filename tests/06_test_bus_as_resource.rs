@@ -1,4 +1,5 @@
 use medi_rs::{Bus, IntoCommand, Result};
+use medi_rs_macros::MediCommand;
 
 #[tokio::test]
 async fn send_call_second_req_test() {
@@ -13,15 +14,15 @@ async fn send_call_second_req_test() {
     assert!(res.is_ok());
 }
 
+#[derive(MediCommand)]
 struct CreateUser {
     name: String,
 }
-impl IntoCommand<()> for CreateUser {}
 
+#[derive(MediCommand)]
 struct ValidateUser {
     name: String,
 }
-impl IntoCommand<()> for ValidateUser {}
 
 // handler functions...
 async fn create_user_dyn(bus: Bus, req: CreateUser) -> Result<()> {

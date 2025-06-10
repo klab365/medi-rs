@@ -2,6 +2,7 @@ mod bus_builder;
 
 // -- flatten
 pub use bus_builder::BusBuilder;
+use medi_rs_macros::MediRessource;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 // -- use dependencies
@@ -14,15 +15,13 @@ use std::sync::Arc;
 
 type EventQueueItem = Box<dyn EventWrapperTrait + Send + Sync>;
 
-#[derive(Clone)]
+#[derive(Clone, MediRessource)]
 pub struct Bus {
     req_handlers: SharedHandler<Arc<dyn HandlerWrapperTrait>>,
     evt_handlers: SharedHandler<Vec<Arc<dyn HandlerWrapperTrait>>>,
     resources: Resources,
     pending_events: Sender<EventQueueItem>,
 }
-
-impl FromResources for Bus {}
 
 impl Bus {
     pub fn builder() -> BusBuilder {

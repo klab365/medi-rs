@@ -1,4 +1,5 @@
 use medi_rs::{BusBuilder, IntoCommand, Result};
+use medi_rs_macros::MediCommand;
 
 #[tokio::test]
 async fn send_should_take_less_than_1ms() {
@@ -18,5 +19,6 @@ async fn print_ping(ping: Ping) -> Result<String> {
     Ok(format!("Pong: {}", ping.0))
 }
 
+#[derive(MediCommand)]
+#[medi_command(return_type = String)]
 struct Ping(String);
-impl IntoCommand<String> for Ping {}

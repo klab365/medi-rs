@@ -1,5 +1,5 @@
 use medi_rs::{Bus, BusBuilder, FromResources, IntoCommand, IntoEvent, Result};
-use medi_rs_macros::MediEvent;
+use medi_rs_macros::{MediCommand, MediEvent, MediRessource};
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -38,10 +38,10 @@ async fn user_created(state: AppStateDyn, user: UserCreatedEvent) -> Result<()> 
 }
 
 /// Request to create a user
+#[derive(MediCommand)]
 struct CreateUser {
     name: String,
 }
-impl IntoCommand<()> for CreateUser {}
 
 #[derive(Clone, MediEvent)]
 struct UserCreatedEvent {
@@ -74,7 +74,7 @@ impl UserRepository for InMemoryUserRepository {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, MediRessource)]
 struct AppStateDyn {
     user_repository: Arc<dyn UserRepository>,
 }
@@ -83,4 +83,3 @@ impl AppStateDyn {
         Self { user_repository }
     }
 }
-impl FromResources for AppStateDyn {}

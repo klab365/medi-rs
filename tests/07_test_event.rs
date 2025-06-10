@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use medi_rs::{Bus, FromResources, IntoEvent, Result};
-use medi_rs_macros::MediEvent;
+use medi_rs_macros::{MediEvent, MediRessource};
 
 #[tokio::test]
 async fn publish_should_process_published_event() {
@@ -33,9 +33,9 @@ struct BaseEvent;
 
 /// In-memory message queue for testing, if events are processed with the handlers
 /// The order is not so important, but the handlers should be called
-#[derive(Clone, Default)]
+#[derive(Clone, Default, MediRessource)]
 struct InMemoryMsgQueue(Arc<Mutex<Vec<String>>>);
-impl FromResources for InMemoryMsgQueue {}
+
 impl InMemoryMsgQueue {
     fn display_all(&self) {
         let queue = self.0.lock().unwrap();

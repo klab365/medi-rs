@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use medi_rs::{Bus, FromResources, IntoCommand};
+use medi_rs_macros::{MediCommand, MediRessource};
 use tokio::sync::Mutex;
 
 #[tokio::test]
@@ -64,14 +65,13 @@ async fn error_handler1(state: AppState, _req: BasicRequest) -> Result<(), Custo
     Err(CustomError::Basic("Error2".to_string()))
 }
 
+#[derive(MediCommand)]
 struct BasicRequest;
-impl IntoCommand<()> for BasicRequest {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, MediRessource)]
 pub struct AppState {
     pub list: Arc<Mutex<Vec<String>>>,
 }
-impl FromResources for AppState {}
 
 #[derive(thiserror::Error, Debug)]
 enum CustomError {
