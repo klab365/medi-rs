@@ -20,7 +20,7 @@ where
     Req: Send + Sync + 'static,
     Res: Send + Sync + 'static,
 {
-    type Future: std::future::Future<Output = Result<Res>> + Send + Sync + 'static;
+    type Future: futures::Future<Output = Result<Res>> + Send + 'static;
 
     fn handle(self, resources: Resources, value: Req) -> Self::Future;
 

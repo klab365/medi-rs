@@ -1,4 +1,5 @@
 use medi_rs::{BusBuilder, IntoCommand, Result};
+use medi_rs_macros::MediCommand;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -52,8 +53,9 @@ async fn print_ping(id: Ping) -> Result<Pong> {
     Ok(Pong(format!("Pong: {}", id.0)))
 }
 
+#[derive(MediCommand)]
+#[medi_command(return_type = Pong)]
 struct Ping(String);
-impl IntoCommand<Pong> for Ping {}
 
 #[derive(Debug)]
 struct Pong(String);

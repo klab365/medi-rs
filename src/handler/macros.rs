@@ -3,14 +3,14 @@ macro_rules! impl_handler {
     ($($T:ident), *) => {
         impl<F, Fut, $($T,)* Req, Res, E> Handler<($($T,)*), Req, Res> for F
         where
-            F: FnOnce($($T,)* Req) -> Fut + Clone + Send + Sync + 'static,
+            F: FnOnce($($T,)* Req) -> Fut + Clone + Send + 'static,
             Req: Sync + Send + 'static,
             Res: Sync + Send + 'static,
             $($T: FromResources + Clone + Send + Sync + 'static,)*
             E: std::error::Error + Sized + Send + Sync + 'static,
-            Fut: std::future::Future<Output = core::result::Result<Res, E>> + Send + Sync + 'static,
+            Fut: futures::Future<Output = core::result::Result<Res, E>> + Send,
         {
-            type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Res>> + Send + Sync>>;
+            type Future = std::pin::Pin<Box<dyn futures::Future<Output = Result<Res>> + Send>>;
 
             #[allow(unused)]
             fn handle(self, resources: resource::Resources, value: Req) -> Self::Future {

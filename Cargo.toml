@@ -1,21 +1,40 @@
 [package]
 name = "medi-rs"
 description = "A yet another mediator library for Rust"
-version = "0.0.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+readme.workspace = true
+
+[workspace.package]
 edition = "2024"
+version = "1.0.0"
 authors = ["Burak <burak.kizilkaya@outlook.com>"]
-license = "MIT"
 homepage = "https://github.com/klab365/medi-rs"
 repository = "https://github.com/klab365/medi-rs"
+license = "MIT"
 keywords = ["mediator"]
 readme = "Readme.md"
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace]
+members = [".", "src-macros"]
+
+[features]
+default = ["medi-rs-macros"]
 
 [dependencies]
+futures = "0.3.31"
 thiserror = "1.0.64"
 tokio = {version = "1.40.0", features = ["full"]}
+medi-rs-macros = { version = "1.0.0", path = "src-macros", optional = true }
 
 [dev-dependencies]
 rand = "0.8.5"
 anyhow = "1.0.98"
-
+async-trait = "0.1.88"
