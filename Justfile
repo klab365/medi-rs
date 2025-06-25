@@ -22,7 +22,7 @@ publish version='0.0.0' *ARGS='':
     # Update workspace version in [workspace.package] section
     sed -i '/^\[workspace\.package\]/,/^\[/ s/^version = ".*"/version = "{{version}}"/' Cargo.toml
     # Update dependency version for medi-rs-macros in root Cargo.toml to use published version
-    sed -i 's/medi-rs-macros = { path = "src-macros"/medi-rs-macros = { version = "{{version}}", path = "src-macros"/g' Cargo.toml
+    sed -i 's/medi-rs-macros = { version = "[^"]*", path = "src-macros"/medi-rs-macros = { version = "{{version}}", path = "src-macros"/g' Cargo.toml
 
     # Publish macro crate first
     {{ CMD }} publish --package medi-rs-macros --allow-dirty {{ARGS}}

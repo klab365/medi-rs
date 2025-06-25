@@ -37,6 +37,3 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
           files: lcov.info
-
-      - name: Dry run publish crate
-        run: just publish 0.0.0 --token ${{ secrets.CRATESIO_TOKEN }} --dry-run
