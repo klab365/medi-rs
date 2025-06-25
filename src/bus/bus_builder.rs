@@ -24,7 +24,7 @@ impl BusBuilder {
 
         if self.req_handlers.contains_key(&type_id) {
             let type_name = std::any::type_name::<Req>();
-            panic!("Route already exists for type: {}", type_name);
+            panic!("Handler already exists for type: {}", type_name);
         }
 
         self.req_handlers.insert(type_id, h.into_dyn());

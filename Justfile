@@ -19,8 +19,15 @@ build *ARGS='':
 # publish
 publish version='0.0.0' *ARGS='':
     echo "Building for release V{{ version }}"
-    sed -i 's/version = "[0-9.]*"$/version = "{{version}}"/' Cargo.toml
-    {{ CMD }} publish --allow-dirty {{ARGS}}
+    # Update version in root Cargo.toml
+    sed -i 's/^version = ".*"/version = "{{version}}"/' Cargo.toml
+    # Update version in src-macros/Cargo.toml
+    sed -i 's/^version = ".*"/version = "{{version}}"/' src-macros/Cargo.toml
+    # Update dependency version for medi-rs-macros in root Cargo.toml
+    sed -i 's/medi-rs-macros = { version *= *"[^"]*"/medi-rs-macros = { version = "{{version}}"/g' Cargo.toml
+
+    {{ CMD }} publish --package medi-rs-macros --allow-dirty {{ARGS}}
+    {{ CMD }} publish --package medi-rs --allow-dirty {{ARGS}}
 
 check-format:
     echo "Checking formatting..."
@@ -50,3 +57,4 @@ test:
 coverage:
     echo "Generating coverage..."
     {{ CMD }} llvm-cov --lcov --output-path lcov.info
+

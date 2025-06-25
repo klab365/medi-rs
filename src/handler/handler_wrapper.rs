@@ -26,7 +26,7 @@ pub(crate) trait HandlerWrapperTrait: Send + Sync {
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>>;
+    ) -> Pin<Box<dyn futures::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send>>;
 }
 
 impl<H, TResource, Req, Res> HandlerWrapperTrait for HandlerWrapper<H, TResource, Req, Res>
@@ -40,7 +40,7 @@ where
         &self,
         resources: Resources,
         value: Box<dyn Any + Send + Sync>,
-    ) -> Pin<Box<dyn std::future::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send + Sync>> {
+    ) -> Pin<Box<dyn futures::Future<Output = Result<Box<dyn Any + Send + Sync>>> + Send>> {
         let Ok(arg) = value.downcast::<Req>() else {
             let type_name = std::any::type_name::<Req>();
             return Box::pin(async { Err(Error::CastError(type_name.to_string())) });
@@ -59,6 +59,8 @@ where
 mod tests {
     use std::sync::Arc;
 
+    use medi_rs_macros::MediCommand;
+
     use crate::IntoCommand;
 
     use super::*;
@@ -75,8 +77,8 @@ mod tests {
         assert!(matches!(res.unwrap_err(), Error::CastError(_)));
     }
 
+    #[derive(MediCommand)]
     struct BaseReq;
-    impl IntoCommand<()> for BaseReq {}
 
     async fn test_handler(_req: BaseReq) -> Result<()> {
         Ok(())

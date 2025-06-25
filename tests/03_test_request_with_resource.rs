@@ -1,6 +1,8 @@
 use medi_rs::BusBuilder;
 use medi_rs::FromResources;
 use medi_rs::{IntoCommand, Result};
+use medi_rs_macros::MediCommand;
+use medi_rs_macros::MediRessource;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
@@ -21,11 +23,10 @@ async fn send_should_return_correct_value_from_the_resource() {
     assert_eq!(state[1], "world");
 }
 
-#[derive(Clone)]
+#[derive(Clone, MediRessource)]
 struct AppState {
     pub list: Arc<Mutex<Vec<String>>>,
 }
-impl FromResources for AppState {}
 
 impl AppState {
     pub fn new() -> Self {
@@ -40,5 +41,5 @@ async fn print_ping(state: AppState, req: Ping) -> Result<()> {
     Ok(())
 }
 
+#[derive(MediCommand)]
 struct Ping(String);
-impl IntoCommand<()> for Ping {}

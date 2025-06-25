@@ -1,0 +1,20 @@
+[package]
+name = "medi-rs-macros"
+version = "1.0.0"
+description = "A macro library for medi-rs"
+license = "MIT"
+homepage = "https://github.com/klab365/medi-rs"
+repository = "https://github.com/klab365/medi-rs"
+edition = "2024"
+
+[dependencies]
+quote = "1.0.40"
+syn = { version = "2.0.101", features = ["full"] }
+
+[lints]
+workspace = true
+
+[lib]
+proc-macro = true
+
+[package.metadata.release]
