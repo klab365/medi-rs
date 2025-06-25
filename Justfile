@@ -19,14 +19,16 @@ build *ARGS='':
 # publish
 publish version='0.0.0' *ARGS='':
     echo "Building for release V{{ version }}"
-    # Update version in root Cargo.toml
-    sed -i 's/^version = ".*"/version = "{{version}}"/' Cargo.toml
-    # Update version in src-macros/Cargo.toml
-    sed -i 's/^version = ".*"/version = "{{version}}"/' src-macros/Cargo.toml
-    # Update dependency version for medi-rs-macros in root Cargo.toml
-    sed -i 's/medi-rs-macros = { version *= *"[^"]*"/medi-rs-macros = { version = "{{version}}"/g' Cargo.toml
+    # Update workspace version in [workspace.package] section
+    sed -i '/^\[workspace\.package\]/,/^\[/ s/^version = ".*"/version = "{{version}}"/' Cargo.toml
+    # Update dependency version for medi-rs-macros in root Cargo.toml to use published version
+    sed -i 's/medi-rs-macros = { path = "src-macros"/medi-rs-macros = { version = "{{version}}", path = "src-macros"/g' Cargo.toml
 
+    # Publish macro crate first
     {{ CMD }} publish --package medi-rs-macros --allow-dirty {{ARGS}}
+    # Wait a moment for crates.io to process
+    sleep 5
+    # Publish main crate
     {{ CMD }} publish --package medi-rs --allow-dirty {{ARGS}}
 
 check-format:

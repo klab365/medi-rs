@@ -1,12 +1,21 @@
 [package]
 name = "medi-rs"
 description = "A yet another mediator library for Rust"
-version = "1.0.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+readme.workspace = true
+
+[workspace.package]
 edition = "2024"
+version = "1.0.0"
 authors = ["Burak <burak.kizilkaya@outlook.com>"]
-license = "MIT"
 homepage = "https://github.com/klab365/medi-rs"
 repository = "https://github.com/klab365/medi-rs"
+license = "MIT"
 keywords = ["mediator"]
 readme = "Readme.md"
 
@@ -29,19 +38,3 @@ medi-rs-macros = { version = "1.0.0", path = "src-macros", optional = true }
 rand = "0.8.5"
 anyhow = "1.0.98"
 async-trait = "0.1.88"
-
-[package.metadata.release]
-
-[workspace.metadata.release]
-# Release all packages in the workspace together
-shared-version = true
-# Don't create individual tags for each package
-tag-name = "v{{version}}"
-# Push changes and tags to remote
-push = true
-# Create a GitHub release
-release = true
-# Sign tags
-sign-tag = false
-# Sign commits
-sign-commit = false

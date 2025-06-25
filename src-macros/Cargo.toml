@@ -1,11 +1,13 @@
 [package]
 name = "medi-rs-macros"
-version = "1.0.0"
 description = "A macro library for medi-rs"
-license = "MIT"
-homepage = "https://github.com/klab365/medi-rs"
-repository = "https://github.com/klab365/medi-rs"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+readme.workspace = true
 
 [dependencies]
 quote = "1.0.40"
@@ -16,5 +18,3 @@ workspace = true
 
 [lib]
 proc-macro = true
-
-[package.metadata.release]
