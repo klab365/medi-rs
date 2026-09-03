@@ -1,0 +1,20 @@
+[package]
+name = "medi-rs-wasm-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+medi-rs = { path = "../../src/medi-rs", default-features = false, features = ["wasm"] }
+medi-rs-macros = { path = "../../src/medi-rs-macros" }
+gloo-timers = { version = "0.3", features = ["futures"] }
+wasm-bindgen = "0.2.95"
+wasm-bindgen-futures = "0.4.45"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.45"

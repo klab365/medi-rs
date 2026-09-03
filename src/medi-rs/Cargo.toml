@@ -1,0 +1,41 @@
+[package]
+name = "medi-rs"
+description = "A lightweight async mediator library for Rust with dependency injection and derive macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+exclude.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+std = ["futures/std"]
+tokio = ["std", "dep:tokio", "medi-rs-macros/tokio"]
+wasm = ["std", "futures/alloc", "dep:wasm-bindgen-futures", "medi-rs-macros/wasm"]
+embassy = ["dep:embassy-sync", "medi-rs-macros/embassy"]
+
+[dependencies]
+futures = { version = "0.3.31", default-features = false }
+
+tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "sync", "time"], optional = true }
+wasm-bindgen-futures = { version = "0.4.45", optional = true }
+embassy-sync = { version = "0.8", optional = true }
+medi-rs-macros = { version = "1.0.0", path = "../medi-rs-macros" }
+
+
+[dev-dependencies]
+anyhow = "1.0.98"
+embassy-executor = { version = "0.7", features = ["arch-std", "executor-thread"] }
+futures = { version = "0.3.31", features = ["executor"] }
+async-trait = "0.1.88"
+rand = "0.8.5"
+thiserror = "1.0.64"
+trybuild = "1.0.101"
+tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "sync", "time"] }

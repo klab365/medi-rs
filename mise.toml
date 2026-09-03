@@ -1,0 +1,182 @@
+[tools]
+"aqua:wasm-bindgen/wasm-pack" = "latest"
+cargo-binstall = "latest"
+"cargo:cargo-llvm-cov" = "latest"
+"cargo:probe-rs-tools" = "latest"
+node = "latest"
+rust = { version = "1.97.1", components = ["clippy", "rustfmt"], targets = ["thumbv7em-none-eabihf", "wasm32-unknown-unknown"] }
+
+[env]
+_.file = { path = ".env" }
+
+[tasks.build]
+description = "Build a feature configuration or all configurations"
+usage = '''
+arg "[feature]" help="Configuration: no-runtime, tokio, wasm, embassy, or all" default="all"
+'''
+run = '''
+build_feature() {
+  case "$usage_feature" in
+    no-runtime) cargo build --workspace --no-default-features ;;
+    tokio)
+      cargo build --workspace --features tokio
+      cargo build --manifest-path examples/tokio/Cargo.toml
+      ;;
+    wasm)
+      cargo build --workspace --features wasm
+      cargo build --manifest-path examples/wasm/Cargo.toml
+      ;;
+    embassy)
+      cargo build --workspace --features embassy
+      (cd examples/embassy-microbit-v2 && cargo build)
+      ;;
+    *) echo "unknown feature configuration: $1" >&2; exit 2 ;;
+  esac
+}
+
+if [ "$usage_feature" = "all" ]; then
+  for feature in no-runtime tokio wasm embassy; do build_feature "$feature"; done
+else
+  build_feature "$usage_feature"
+fi
+'''
+
+[tasks.publish]
+description = "Publish the crates"
+usage = '''
+arg "[version]" help="Version to publish" default="0.0.0"
+arg "[cargo_args]" help="Additional cargo publish arguments" var=#true double_dash="automatic"
+'''
+run = '''
+version="${usage_version:?}"
+if [ -n "${usage_cargo_args:-}" ]; then
+  eval "set -- ${usage_cargo_args}"
+else
+  set --
+fi
+
+VERSION="$version" perl -0pi -e 'BEGIN { $version = $ENV{VERSION} // die "VERSION is required\n" } s{(\[workspace\.package\][^[]*?version = ")[^"]*(")}{$1 . $version . $2}se' Cargo.toml
+VERSION="$version" perl -0pi -e 'BEGIN { $version = $ENV{VERSION} // die "VERSION is required\n" } s!medi-rs-macros = \{ version = "[^"]*", path = "\.\./medi-rs-macros"!medi-rs-macros = { version = "$version", path = "../medi-rs-macros"!g' src/medi-rs/Cargo.toml
+
+cargo publish --workspace --allow-dirty "$@"
+'''
+
+[tasks.check-format]
+description = "Check code formatting"
+run = "cargo fmt --all -- --check"
+
+[tasks.format]
+description = "Format the code"
+run = "cargo fmt --all"
+
+[tasks.lint]
+description = "Lint a feature configuration or all configurations"
+usage = '''
+arg "[feature]" help="Configuration: no-runtime, tokio, wasm, embassy, or all" default="all"
+'''
+run = '''
+lint_feature() {
+  case "$1" in
+    no-runtime) cargo clippy --workspace --all-targets --no-default-features -- -D warnings ;;
+    tokio|wasm|embassy) cargo clippy --workspace --all-targets --features "$1" -- -D warnings ;;
+    *) echo "unknown feature configuration: $1" >&2; exit 2 ;;
+  esac
+}
+
+if [ "$usage_feature" = "all" ]; then
+  for feature in no-runtime tokio wasm embassy; do lint_feature "$feature"; done
+else
+  lint_feature "$usage_feature"
+fi
+'''
+
+[tasks.fix]
+description = "Fix the code"
+run = "cargo fix --workspace --all-targets --all-features --allow-staged"
+
+[tasks.test]
+description = "Test a feature configuration or all configurations"
+usage = '''
+arg "[feature]" help="Configuration: no-runtime, tokio, wasm, embassy, or all" default="all"
+'''
+run = '''
+test_feature() {
+  case "$1" in
+    no-runtime) cargo test --workspace --no-default-features ;;
+    tokio|wasm|embassy) cargo test --workspace --features "$1" ;;
+    *) echo "unknown feature configuration: $1" >&2; exit 2 ;;
+  esac
+}
+
+if [ "$usage_feature" = "all" ]; then
+  for feature in no-runtime tokio wasm embassy; do test_feature "$feature"; done
+else
+  test_feature "$usage_feature"
+fi
+'''
+
+[tasks.check-examples]
+description = "Check examples for a runtime or all host-runnable runtimes"
+usage = '''
+arg "[feature]" help="Runtime: tokio, wasm, or all" default="all"
+'''
+run = '''
+case "$usage_feature" in
+  tokio) cargo check --manifest-path examples/tokio/Cargo.toml ;;
+  wasm) cargo check --manifest-path examples/wasm/Cargo.toml ;;
+  all)
+    cargo check --manifest-path examples/tokio/Cargo.toml
+    cargo check --manifest-path examples/wasm/Cargo.toml
+    ;;
+  *) echo "unknown example runtime: $usage_feature" >&2; exit 2 ;;
+esac
+'''
+
+[tasks.run-examples]
+description = "Run Tokio examples"
+usage = '''
+arg "[feature]" help="Runtime: tokio, wasm, or all" default="all"
+'''
+run = '''
+run_tokio_examples() {
+  for example in examples/tokio/src/bin/*.rs; do
+    name="$(basename "$example" .rs)"
+    cargo run --manifest-path examples/tokio/Cargo.toml --bin "$name"
+  done
+}
+
+case "$usage_feature" in
+  tokio) run_tokio_examples ;;
+  wasm) (cd examples/wasm && wasm-pack test --node) ;;
+  all)
+    run_tokio_examples
+    (cd examples/wasm && wasm-pack test --node)
+    ;;
+  *) echo "unknown example runtime: $usage_feature" >&2; exit 2 ;;
+esac
+'''
+
+[tasks.check-docs]
+description = "Check documentation for a feature configuration or all configurations"
+usage = '''
+arg "[feature]" help="Configuration: no-runtime, tokio, wasm, embassy, or all" default="all"
+'''
+run = '''
+docs_feature() {
+  case "$1" in
+    no-runtime) RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-default-features --no-deps ;;
+    tokio|wasm|embassy) RUSTDOCFLAGS='-D warnings' cargo doc --workspace --features "$1" --no-deps ;;
+    *) echo "unknown feature configuration: $1" >&2; exit 2 ;;
+  esac
+}
+
+if [ "$usage_feature" = "all" ]; then
+  for feature in no-runtime tokio wasm embassy; do docs_feature "$feature"; done
+else
+  docs_feature "$usage_feature"
+fi
+'''
+
+[tasks.coverage]
+description = "Generate workspace coverage"
+run = "cargo llvm-cov --workspace --features tokio --lcov --output-path lcov.info"

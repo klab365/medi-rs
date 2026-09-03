@@ -1,0 +1,31 @@
+[package]
+name = "medi-rs-embassy-microbit-v2-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+debug = 2
+lto = "fat"
+opt-level = "z"
+
+[dependencies]
+medi-rs = { path = "../../src/medi-rs", default-features = false, features = ["embassy"] }
+
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7"
+defmt = "1"
+defmt-rtt = "1"
+embassy-executor = { version = "0.7", features = ["arch-cortex-m", "executor-thread", "defmt"] }
+embassy-nrf = { version = "0.3", features = ["defmt", "nrf52833", "time-driver-rtc1", "gpiote"] }
+embassy-sync = "0.6"
+embassy-time = { version = "0.4", features = ["defmt"] }
+panic-probe = { version = "1", features = ["print-defmt"] }
+static_cell = "2"

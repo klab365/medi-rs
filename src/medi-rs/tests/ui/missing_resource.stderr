@@ -1,0 +1,69 @@
+error[E0277]: the trait bound `(): medi_rs::tlist::Get<UserRepository, _>` is not satisfied
+  --> tests/ui/missing_resource.rs:19:5
+   |
+19 | /     medi_module! {
+20 | |         manifest users_manifest;
+21 | |         commands { CreateUser => create_user; }
+   | |                                  ----------- required by a bound introduced by this call
+22 | |     }
+   | |_____^ the trait `medi_rs::tlist::Get<UserRepository, _>` is not implemented for `()`
+...
+27 | / mediator! {
+28 | |     pub struct AppMediator {
+29 | |         event_queue_capacity: 16;
+30 | |         event_workers: 1;
+...  |
+33 | | }
+   | |_- in this macro invocation
+   |
+help: the following other types implement trait `medi_rs::tlist::Get<T, I>`
+  --> src/tlist.rs
+   |
+   | / impl<T, Tail> Get<T, Here> for (T, Tail)
+   | | where
+   | |     T: Clone,
+   | |_____________^ `(T, Tail)` implements `medi_rs::tlist::Get<T, medi_rs::tlist::Here>`
+...
+   | / impl<T, Head, Tail, I> Get<T, There<I>> for (Head, Tail)
+   | | where
+   | |     Tail: Get<T, I>,
+   | |____________________^ `(Head, Tail)` implements `medi_rs::tlist::Get<T, medi_rs::tlist::There<I>>`
+note: required by a bound in `__medi_handler_create_user`
+  --> tests/ui/missing_resource.rs:11:1
+   |
+11 | #[medi_handler]
+   | ^^^^^^^^^^^^^^^ required by this bound in `__medi_handler_create_user`
+   = note: this error originates in the macro `$crate::mediator_composition_marker` which comes from the expansion of the attribute macro `medi_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `(): medi_rs::tlist::Get<UserRepository, _>` is not satisfied
+  --> tests/ui/missing_resource.rs:21:34
+   |
+21 |           commands { CreateUser => create_user; }
+   |                                    ^^^^^^^^^^^ the trait `medi_rs::tlist::Get<UserRepository, _>` is not implemented for `()`
+...
+27 | / mediator! {
+28 | |     pub struct AppMediator {
+29 | |         event_queue_capacity: 16;
+30 | |         event_workers: 1;
+...  |
+33 | | }
+   | |_- in this macro invocation
+   |
+help: the following other types implement trait `medi_rs::tlist::Get<T, I>`
+  --> src/tlist.rs
+   |
+   | / impl<T, Tail> Get<T, Here> for (T, Tail)
+   | | where
+   | |     T: Clone,
+   | |_____________^ `(T, Tail)` implements `medi_rs::tlist::Get<T, medi_rs::tlist::Here>`
+...
+   | / impl<T, Head, Tail, I> Get<T, There<I>> for (Head, Tail)
+   | | where
+   | |     Tail: Get<T, I>,
+   | |____________________^ `(Head, Tail)` implements `medi_rs::tlist::Get<T, medi_rs::tlist::There<I>>`
+note: required by a bound in `__medi_handler_create_user`
+  --> tests/ui/missing_resource.rs:11:1
+   |
+11 | #[medi_handler]
+   | ^^^^^^^^^^^^^^^ required by this bound in `__medi_handler_create_user`
+   = note: this error originates in the macro `users_manifest` which comes from the expansion of the attribute macro `medi_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
