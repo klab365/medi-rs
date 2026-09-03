@@ -223,7 +223,7 @@ A missing or duplicate resource is a compile-time error. Resource derive macros 
 
 ### Runtime tasks
 
-With a runtime feature, `#[medi_task]` creates a task with the same typed resource injection as a handler. Its first parameter is `&AppMediator`; remaining value parameters are declared resources. Register it in a `tasks` section. `mediator.start(spawner)` starts tasks on Embassy; `mediator.start()` does so on Tokio and Wasm.
+With a runtime feature, `#[medi_task]` creates a task with the same typed resource injection as a handler. It may take `&AppMediator` as its first parameter when it needs mediator access; remaining value parameters are declared resources. Register it in a `tasks` section. `mediator.start(spawner)` starts tasks on Embassy; `mediator.start()` does so on Tokio and Wasm.
 
 ```rust,ignore
 #[medi_task]
