@@ -7,17 +7,26 @@ use medi_rs::{medi_module, medi_task, mediator};
 #[derive(Clone, Copy)]
 struct TaskState(&'static AtomicU32);
 
+#[derive(Clone, Copy)]
+struct TaskWithoutMediatorState(&'static AtomicU32);
+
 static TASK_STARTED: AtomicU32 = AtomicU32::new(0);
+static TASK_WITHOUT_MEDIATOR_STARTED: AtomicU32 = AtomicU32::new(0);
 
 #[medi_task]
 async fn initialize(_mediator: &RuntimeTaskMediator, state: TaskState) {
     state.0.store(1, Ordering::Release);
 }
 
+#[medi_task]
+async fn initialize_without_mediator(state: TaskWithoutMediatorState) {
+    state.0.store(1, Ordering::Release);
+}
+
 medi_module! {
     manifest runtime_task_manifest;
-    resources { TaskState; }
-    tasks { initialize; }
+    resources { TaskState; TaskWithoutMediatorState; }
+    tasks { initialize; initialize_without_mediator; }
 }
 
 mediator! {
@@ -32,9 +41,14 @@ mediator! {
 #[tokio::test]
 async fn tokio_starts_registered_tasks_with_resources() {
     TASK_STARTED.store(0, Ordering::Release);
-    let mediator = Box::leak(Box::new(RuntimeTaskMediator::new((TaskState(&TASK_STARTED),))));
+    TASK_WITHOUT_MEDIATOR_STARTED.store(0, Ordering::Release);
+    let mediator = Box::leak(Box::new(RuntimeTaskMediator::new((
+        TaskState(&TASK_STARTED),
+        TaskWithoutMediatorState(&TASK_WITHOUT_MEDIATOR_STARTED),
+    ))));
     mediator.start();
 
     tokio::task::yield_now().await;
     assert_eq!(TASK_STARTED.load(Ordering::Acquire), 1);
+    assert_eq!(TASK_WITHOUT_MEDIATOR_STARTED.load(Ordering::Acquire), 1);
 }

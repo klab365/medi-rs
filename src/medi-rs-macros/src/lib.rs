@@ -3,12 +3,18 @@
 //! These macros generate command metadata, handler invokers, and module
 //! manifests for the main `medi-rs` crate.
 
-mod functions;
+mod command;
+mod composition;
+mod generate;
+mod handler;
+mod manifest;
+mod task;
 
-use functions::{
-    derive_medi_command_inner, medi_handler_inner, medi_module_inner, medi_task_inner,
-    mediator_composition_marker_inner,
-};
+use command::derive_medi_command_inner;
+use composition::mediator_composition_marker_inner;
+use handler::medi_handler_inner;
+use manifest::medi_module_inner;
+use task::medi_task_inner;
 
 /// Derive static command metadata for a command or query type.
 ///
@@ -39,8 +45,9 @@ pub fn medi_handler(attribute: proc_macro::TokenStream, input: proc_macro::Token
 
 /// Generate a runtime task invoker with typed mediator resource injection.
 ///
-/// The selected medi-rs runtime starts registered tasks. The first parameter
-/// must be `&AppMediator`; remaining value parameters are resources.
+/// The selected medi-rs runtime starts registered tasks. An optional first
+/// `&AppMediator` parameter provides mediator access; remaining value parameters
+/// are resources.
 #[proc_macro_attribute]
 pub fn medi_task(attribute: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     medi_task_inner(attribute, input)

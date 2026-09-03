@@ -1,10 +1,8 @@
 {
-    "rust-analyzer.cargo.path": "/home/vscode/.cargo/bin/cargo",
-    "rust-analyzer.rustc.source": "discover",
     "rust-analyzer.server.extraEnv": {
-        "PATH": "/home/vscode/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+        "RUSTUP_TOOLCHAIN": "1.97.1"
     },
     "rust-analyzer.cargo.extraEnv": {
-        "PATH": "/home/vscode/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+        "RUSTUP_TOOLCHAIN": "1.97.1"
     }
 }
