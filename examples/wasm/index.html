@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>medi-rs WASM example</title>
+  </head>
+  <body>
+       <script type="module">
+         import init, {
+           greet,
+           publish_user_registered,
+           publish_with_generated_mediator,
+         } from "./pkg/medi_rs_wasm_example.js";
+
+         await init();
+
+         console.log(await greet("WASM"));
+         await publish_user_registered("user@example.com");
+         await publish_with_generated_mediator("hello from generated mediator");
+       </script>
+  </body>
+</html>

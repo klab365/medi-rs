@@ -10,30 +10,151 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  ci_build:
+  format:
+    name: Format
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: extractions/setup-just@v2
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
 
-      - name: Install Docker for local builds
-        run: just build-docker $(id -u)
+      - name: Check format
+        run: mise check-format
 
-      - name: Check Code Format
-        run: just check-format
+  publish-dry-run:
+    name: Publish dry run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Lint Code
-        run: just lint
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+
+      - name: Verify crates can be published
+        run: |
+          version="$(cargo pkgid -p medi-rs | cut -d# -f2)"
+          mise run publish -- "$version" --dry-run --no-verify
+
+  no-runtime:
+    name: No runtime feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+
+      - name: Build
+        run: mise build no-runtime
+
+      - name: Lint
+        run: mise lint no-runtime
+
+      - name: Test
+        run: mise test no-runtime
+
+      - name: Check documentation
+        run: mise check-docs no-runtime
+
+  tokio:
+    name: Tokio feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+
+      - name: Build
+        run: mise build tokio
+
+      - name: Lint
+        run: mise lint tokio
+
+      - name: Test
+        run: mise test tokio
+
+      - name: Check documentation
+        run: mise check-docs tokio
+
+      - name: Check examples
+        run: mise check-examples tokio
+
+      - name: Run examples
+        run: mise run-examples tokio
+
+  wasm:
+    name: WASM feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+
+      - name: Build
+        run: mise build wasm
+
+      - name: Lint
+        run: mise lint wasm
+
+      - name: Test
+        run: mise test wasm
+
+      - name: Check documentation
+        run: mise check-docs wasm
+
+      - name: Check example
+        run: mise check-examples wasm
+
+      - name: Run example tests
+        run: mise run-examples wasm
+
+  embassy:
+    name: Embassy feature
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+
+      - name: Build
+        run: mise build embassy
+
+      - name: Lint
+        run: mise lint embassy
+
+      - name: Test
+        run: mise test embassy
+
+      - name: Check documentation
+        run: mise check-docs embassy
+
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
 
       - name: Generate code coverage
-        run: just coverage
+        run: mise coverage
 
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: true
-          files: lcov.info
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

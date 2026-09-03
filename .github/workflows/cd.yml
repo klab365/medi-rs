@@ -3,24 +3,44 @@ name: cd
 on:
   push:
     tags:
-      - "V*.*.*"
+      - "v*.*.*"
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-release:
+  publish:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Install just
-        uses: extractions/setup-just@v2
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
 
       - name: Extract version number
-        id: extract_version
-        run: echo "medi-rs_version=$(echo ${{ github.ref }} | sed 's/refs\/tags\/V\(.*\)/\1/')" >> $GITHUB_ENV
+        run: echo "MEDI_RS_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
-      - name: Install Docker for local builds
-        run: just build-docker $(id -u)
+      - name: Check format
+        run: mise run check-format
 
-      - name: Build for release and with the version number
-        run: just publish ${{ env.medi-rs_version }} --token ${{ secrets.CRATESIO_TOKEN }}
+      - name: Lint
+        run: mise run lint
+
+      - name: Test
+        run: mise run test
+
+      - name: Check examples
+        run: mise run check-examples
+
+      - name: Run examples
+        run: mise run run-examples
+
+      - name: Check docs
+        run: mise run check-docs
+
+      - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATESIO_TOKEN }}
+        run: mise run publish -- "$MEDI_RS_VERSION"

@@ -1,0 +1,28 @@
+[package]
+name = "medi-rs-macros"
+description = "Derive macros for the medi-rs mediator library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+exclude.workspace = true
+
+[features]
+tokio = []
+wasm = []
+embassy = []
+
+[dependencies]
+proc-macro2 = "1.0.95"
+quote = "1.0.40"
+syn = { version = "2.0.101", features = ["full"] }
+
+[lints]
+workspace = true
+
+[lib]
+proc-macro = true

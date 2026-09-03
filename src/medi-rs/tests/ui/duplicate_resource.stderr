@@ -1,0 +1,15 @@
+error: duplicate resource registration for `Database`
+  --> tests/ui/duplicate_resource.rs:17:21
+   |
+17 |           resources { Database; }
+   |                       ^^^^^^^^
+...
+24 | / mediator! {
+25 | |     pub struct AppMediator {
+26 | |         event_queue_capacity: 16;
+27 | |         event_workers: 1;
+...  |
+30 | | }
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `second_manifest` which comes from the expansion of the macro `mediator` (in Nightly builds, run with -Z macro-backtrace for more info)

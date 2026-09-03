@@ -1,0 +1,12 @@
+[package]
+name = "medi-rs-tokio-examples"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+medi-rs = { path = "../../src/medi-rs", default-features = false, features = ["tokio"] }
+thiserror = "1.0.64"
+tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
