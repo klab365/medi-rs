@@ -49,7 +49,7 @@ mediator! {
 
 #[test]
 fn embassy_queue_honors_the_generated_capacity() {
-    let mediator = EmbassyTestMediator::new((TaskState(&TASK_STARTED),));
+    let mediator = EmbassyTestMediator::new(TaskState(&TASK_STARTED));
 
     futures::executor::block_on(mediator.publish(EventObserved(1))).expect("first event must fit");
     futures::executor::block_on(async {
@@ -65,7 +65,7 @@ fn embassy_worker_dispatches_published_events() {
 
     thread::spawn(move || {
         let executor = Box::leak(Box::new(embassy_executor::Executor::new()));
-        let mediator = Box::leak(Box::new(EmbassyTestMediator::new((TaskState(&TASK_STARTED),))));
+        let mediator = Box::leak(Box::new(EmbassyTestMediator::new(TaskState(&TASK_STARTED))));
         let mediator_for_test: &'static EmbassyTestMediator = mediator;
 
         executor.run(|spawner| {

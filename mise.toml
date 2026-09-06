@@ -42,23 +42,94 @@ fi
 '''
 
 [tasks.publish]
-description = "Publish the crates"
+description = "Publish the versions declared in Cargo.toml"
 usage = '''
-arg "[version]" help="Version to publish" default="0.0.0"
 arg "[cargo_args]" help="Additional cargo publish arguments" var=#true double_dash="automatic"
 '''
 run = '''
-version="${usage_version:?}"
 if [ -n "${usage_cargo_args:-}" ]; then
   eval "set -- ${usage_cargo_args}"
 else
   set --
 fi
 
-VERSION="$version" perl -0pi -e 'BEGIN { $version = $ENV{VERSION} // die "VERSION is required\n" } s{(\[workspace\.package\][^[]*?version = ")[^"]*(")}{$1 . $version . $2}se' Cargo.toml
-VERSION="$version" perl -0pi -e 'BEGIN { $version = $ENV{VERSION} // die "VERSION is required\n" } s!medi-rs-macros = \{ version = "[^"]*", path = "\.\./medi-rs-macros"!medi-rs-macros = { version = "$version", path = "../medi-rs-macros"!g' src/medi-rs/Cargo.toml
-
 cargo publish --workspace --allow-dirty "$@"
+'''
+
+[tasks.verify-release]
+description = "Verify workspace versions match an unpublished release version"
+usage = '''
+arg "<version>" help="Release version in X.Y.Z format"
+'''
+run = '''
+release_version="${usage_version:?}"
+packages="$(cargo metadata --no-deps --format-version 1 | jq -r '
+  .workspace_members as $members |
+  .packages[] |
+  select(.id as $id | $members | index($id)) |
+  [.name, .version] | @tsv
+')"
+test -n "$packages"
+
+while IFS=$'\t' read -r crate version; do
+  test "$release_version" = "$version" || {
+    echo "$crate is version $version, but the requested release version is $release_version" >&2
+    exit 1
+  }
+
+  status="$(curl --silent --show-error --user-agent "medi-rs release verification (https://github.com/klab365/medi-rs)" --output /dev/null --write-out '%{http_code}' "https://crates.io/api/v1/crates/$crate/$version")" || {
+    echo "Could not query crates.io for $crate $version" >&2
+    exit 1
+  }
+
+  case "$status" in
+    404) ;;
+    200)
+      echo "$crate $version is already published" >&2
+      exit 1
+      ;;
+    *)
+      echo "Unexpected crates.io response for $crate $version: HTTP $status" >&2
+      exit 1
+      ;;
+  esac
+done <<< "$packages"
+'''
+
+[tasks.check-embassy-dependencies]
+description = "Require one version of every direct Embassy dependency in every workspace"
+run = '''
+workspace_roots_file="$(mktemp)"
+trap 'rm -f "$workspace_roots_file"' EXIT HUP INT TERM
+
+find . -name Cargo.toml -not -path '*/target/*' -exec sh -c '
+  for manifest do
+    cargo metadata --manifest-path "$manifest" --no-deps --format-version 1 | jq -r ".workspace_root"
+  done
+' sh {} + | sort -u > "$workspace_roots_file"
+
+while IFS= read -r workspace_root || [ -n "$workspace_root" ]; do
+  crates="$(cargo metadata --manifest-path "$workspace_root/Cargo.toml" --no-deps --format-version 1 | jq -r '
+    .workspace_members as $members |
+    .packages[] |
+    select(.id as $id | $members | index($id)) |
+    .dependencies[] |
+    select(.name | startswith("embassy-")) |
+    .name
+  ' | sort -u)"
+  [ -n "$crates" ] || continue
+
+  tree="$(cargo tree --manifest-path "$workspace_root/Cargo.toml" --workspace --all-features --edges normal,build,dev --prefix none)"
+  for crate in $crates; do
+    versions="$(printf '%s\n' "$tree" | awk -v crate="$crate" '$1 == crate { print $2 }' | sort -u)"
+    version_count="$(printf '%s\n' "$versions" | grep -c . || true)"
+
+    if [ "$version_count" -ne 1 ]; then
+      echo "$workspace_root: expected exactly one $crate version, found: ${versions:-none}" >&2
+      exit 1
+    fi
+  done
+done < "$workspace_roots_file"
 '''
 
 [tasks.check-format]

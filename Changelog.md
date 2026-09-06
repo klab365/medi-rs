@@ -2,6 +2,17 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## 2.1.0
+
+### Changed
+
+- Mediator constructors now take declared resources as separate arguments, such
+  as `Mediator::new(resource_a, resource_b)`, instead of one resource tuple.
+- Updated the Embassy integration and the micro:bit example to compatible
+  `embassy-executor` 0.10, `embassy-nrf` 0.11, `embassy-sync` 0.8, and
+  `embassy-time` 0.5 releases. Embassy consumers must update from the 0.7 spawn
+  API and enable the appropriate `platform-*` executor feature.
+
 ## 2.0.0
 
 ### Breaking changes

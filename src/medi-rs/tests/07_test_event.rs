@@ -40,7 +40,7 @@ mediator! {
 #[tokio::test]
 async fn publish_should_process_published_event() {
     let queue = InMemoryMsgQueue::default();
-    let mediator = Box::leak(Box::new(EventMediator::new((queue.clone(),))));
+    let mediator = Box::leak(Box::new(EventMediator::new(queue.clone())));
     mediator.start();
     mediator.publish(BaseEvent).await.unwrap();
     mediator.publish(BaseEvent).await.unwrap();

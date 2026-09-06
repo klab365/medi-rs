@@ -67,14 +67,14 @@ pub(crate) fn generate_constructor(
         },
         (false, true) => quote! {
             /// Construct a mediator from its declared resource values.
-            pub fn new((#(#resource_names,)*): (#(#resource_types,)*)) -> Self {
+            pub fn new(#(#resource_names: #resource_types),*) -> Self {
                 #configuration_check
                 Self { resources: #resource_values, event_queue: ::medi_rs::EventQueue::new(Some(#capacity)) }
             }
         },
         (false, false) => quote! {
             /// Construct a mediator from its declared resource values.
-            pub fn new((#(#resource_names,)*): (#(#resource_types,)*)) -> Self {
+            pub fn new(#(#resource_names: #resource_types),*) -> Self {
                 Self { resources: #resource_values }
             }
         },
@@ -86,7 +86,7 @@ pub(crate) fn generate_task_workers(tasks: &[syn::Path], name: &Ident) -> Vec<pr
         let worker = format_ident!("medi_rs_task_{index}");
         let invoker = task_invoker_path(task);
         if cfg!(feature = "embassy") {
-            quote! { #[::embassy_executor::task] async fn #worker(mediator: &'static #name) { #invoker(mediator, &mediator.resources).await; } }
+            quote! { #[::medi_rs::embassy_executor::task] async fn #worker(mediator: &'static #name) { #invoker(mediator, &mediator.resources).await; } }
         } else {
             quote! { async fn #worker(mediator: &'static #name) { #invoker(mediator, &mediator.resources).await; } }
         }
@@ -100,7 +100,7 @@ pub(crate) fn generate_task_spawns(tasks: &[syn::Path]) -> Vec<proc_macro2::Toke
         .map(|(index, _)| {
             let worker = format_ident!("medi_rs_task_{index}");
             if cfg!(feature = "embassy") {
-                quote! { spawner.spawn(#worker(self)).ok(); }
+                quote! { if let Ok(token) = #worker(self) { spawner.spawn(token); } }
             } else {
                 quote! { ::medi_rs::adapters::selected::spawn(#worker(self)); }
             }
@@ -169,9 +169,10 @@ fn generate_event_start(
     if cfg!(feature = "embassy") {
         quote! {
             /// Start the generated Embassy event worker.
-            pub fn start(&'static self, spawner: ::embassy_executor::Spawner) where #resource_tuple: Sync {
+            pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
-                for _ in 0..Self::EVENT_WORKERS { spawner.spawn(#worker(self)).ok(); }
+                let event_workers = Self::EVENT_WORKERS;
+                for _ in 0..event_workers { if let Ok(token) = #worker(self) { spawner.spawn(token); } }
                 #(#task_spawns)*
             }
         }
@@ -180,7 +181,8 @@ fn generate_event_start(
             /// Start the generated event worker and registered runtime tasks.
             pub fn start(&'static self) where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
-                for _ in 0..Self::EVENT_WORKERS { ::medi_rs::adapters::selected::spawn(#worker(self)); }
+                let event_workers = Self::EVENT_WORKERS;
+                for _ in 0..event_workers { ::medi_rs::adapters::selected::spawn(#worker(self)); }
                 #(#task_spawns)*
             }
         }
@@ -222,7 +224,7 @@ pub(crate) fn generate_event_support(
         Ok(event) => match event { #(#dispatch_arms)* }, Err(_) => break,
     } } };
     let worker_function = if cfg!(feature = "embassy") {
-        quote! { #[allow(non_snake_case)] #[::embassy_executor::task] async fn #worker(mediator: &'static #name) { #worker_loop } }
+        quote! { #[allow(non_snake_case)] #[::medi_rs::embassy_executor::task] async fn #worker(mediator: &'static #name) { #worker_loop } }
     } else {
         quote! { #[allow(non_snake_case)] async fn #worker(mediator: &'static #name) { #worker_loop } }
     };
@@ -254,7 +256,7 @@ pub(crate) fn generate_task_only_start(
     }
     if cfg!(feature = "embassy") {
         quote! { impl #name { /// Start the registered Embassy tasks.
-        pub fn start(&'static self, spawner: ::embassy_executor::Spawner) where #resource_tuple: Sync { #(#task_spawns)* } } }
+        pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) where #resource_tuple: Sync { #(#task_spawns)* } } }
     } else {
         quote! { impl #name { /// Start the registered runtime tasks.
         pub fn start(&'static self) where #resource_tuple: Sync { #(#task_spawns)* } } }

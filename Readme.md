@@ -12,11 +12,11 @@
 
 Choose one runtime adapter for event processing:
 
-| Feature | Runtime | Notes |
-| --- | --- | --- |
-| `tokio` | Tokio | Hosted applications and the runnable Tokio examples. |
-| `wasm` | `wasm_bindgen_futures` | WebAssembly event workers use `spawn_local`. |
-| `embassy` | Embassy | `no_std` embedded applications; queue capacity must be a const expression. |
+| Feature   | Runtime                | Notes                                                                      |
+| --------- | ---------------------- | -------------------------------------------------------------------------- |
+| `tokio`   | Tokio                  | Hosted applications and the runnable Tokio examples.                       |
+| `wasm`    | `wasm_bindgen_futures` | WebAssembly event workers use `spawn_local`.                               |
+| `embassy` | Embassy                | `no_std` embedded applications; queue capacity must be a const expression. |
 
 The runtime features are mutually exclusive. Command-only mediators need no runtime feature. Events and runtime tasks require exactly one adapter feature.
 
@@ -60,13 +60,13 @@ mediator! {
     }
 }
 
-# async fn run() -> Result<()> {
-let greeting = AppMediator::new()
-    .send(Greet { name: "Rust".into() })
-    .await?;
-assert_eq!(greeting, "Hello, Rust!");
-# Ok(())
-# }
+async fn run() -> Result<()> {
+    let greeting = AppMediator::new()
+        .send(Greet { name: "Rust".into() })
+        .await?;
+    assert_eq!(greeting, "Hello, Rust!");
+    Ok(())
+}
 ```
 
 `MediCommand` defaults to a `()` response and `core::convert::Infallible` error. Specify `return_type` and `error_type` when the handler returns other types.
@@ -129,7 +129,7 @@ async fn logging(
 #[medi_handler(decorators = [logging, validation])]
 async fn create_user(command: CreateUser) -> Result<User, CreateUserError> {
     // `logging` wraps `validation`, which wraps this handler.
-    # todo!()
+    todo!()
 }
 ```
 
@@ -186,7 +186,8 @@ The generated type has `new`, `send`, and, when an event route exists, `publish`
 Resources are ordinary `Clone` values. List each resource in a module manifest, pass the values to the generated mediator constructor in declaration order, and request them as handler parameters before the command or event.
 
 ```rust
-# use medi_rs::{MediCommand, Result, medi_handler, medi_module, mediator};
+use medi_rs::{MediCommand, Result, medi_handler, medi_module, mediator};
+
 #[derive(Clone)]
 struct UserRepository;
 
@@ -213,13 +214,44 @@ mediator! {
     }
 }
 
-# async fn run() -> Result<()> {
-AppMediator::new((UserRepository,)).send(CreateUser).await?;
-# Ok(())
-# }
+async fn run() -> Result<()> {
+    AppMediator::new(UserRepository).send(CreateUser).await?;
+    Ok(())
+}
 ```
 
 A missing or duplicate resource is a compile-time error. Resource derive macros are not required.
+
+### Request-scoped data
+
+Resources are fixed when the mediator is constructed; `send` accepts only the command, so it cannot inject a resource for one call. Model request-scoped dependencies such as authentication, tenant information, and correlation IDs as command data instead. A command is moved into `send` and then into its handler, so its fields are not cloned during normal command dispatch.
+
+```rust
+struct AuthContext {
+    user_id: String,
+}
+
+#[derive(MediCommand)]
+#[medi_command(error_type = medi_rs::Error)]
+struct CreateInvoice {
+    customer_id: String,
+    // `None` explicitly represents an anonymous request.
+    auth: Option<AuthContext>,
+}
+
+async fn create_invoice(request: HttpRequest, mediator: &AppMediator) -> Result<()> {
+    let auth = authenticate(&request).await?;
+
+    mediator
+        .send(CreateInvoice {
+            customer_id: request.customer_id().to_owned(),
+            auth: Some(auth),
+        })
+        .await
+}
+```
+
+Use `Option<T>` in `resources { ... }` only when a dependency is optional for the lifetime of the mediator. For request-scoped data, keep the command field small (or use `Arc` inside it when sharing larger data is necessary).
 
 ### Runtime tasks
 
@@ -246,20 +278,28 @@ medi_module! {
 Events are plain `Clone + Send + 'static` values. List each event route in a module manifest, create a `'static` mediator, and call `start` before publishing. Each generated worker dispatches an event to every registered handler. `publish` waits when the configured bounded queue is full. Event handler errors are currently ignored after dispatch.
 
 ```rust,no_run
-# use medi_rs::{Result, medi_handler, medi_module, mediator};
-# #[derive(Clone)] struct UserRegistered;
-# #[medi_handler] async fn send_welcome_email(_: UserRegistered) -> Result<()> { Ok(()) }
-# medi_module! { manifest users; events { UserRegistered => [send_welcome_email]; } }
-# mediator! { struct AppMediator { event_queue_capacity: 16; event_workers: 1; modules: [users]; } }
-# async fn run() -> Result<()> {
-let mediator = Box::leak(Box::new(AppMediator::new()));
-mediator.start();
-mediator.publish(UserRegistered).await?;
-# Ok(())
-# }
+use medi_rs::{Result, medi_handler, medi_module, mediator};
+
+#[derive(Clone)]
+struct UserRegistered;
+
+#[medi_handler]
+async fn send_welcome_email(_: UserRegistered) -> Result<()> {
+    Ok(())
+}
+
+medi_module! { manifest users; events { UserRegistered => [send_welcome_email]; } }
+mediator! { struct AppMediator { event_queue_capacity: 16; event_workers: 1; modules: [users]; } }
+
+async fn run() -> Result<()> {
+    let mediator = Box::leak(Box::new(AppMediator::new()));
+    mediator.start();
+    mediator.publish(UserRegistered).await?;
+    Ok(())
+}
 ```
 
-For Embassy, initialize the mediator in a `StaticCell` and call `mediator.start(spawner)`. See the micro:bit example below.
+For Embassy, initialize the mediator in a `StaticCell` and call `mediator.start(spawner)`. The Embassy integration requires `embassy-executor` 0.10 (with the platform feature appropriate for the target, such as `platform-cortex-m`). See the micro:bit example below.
 
 ## Examples
 

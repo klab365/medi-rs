@@ -1,0 +1,5 @@
+error: expected `decorators`
+ --> tests/ui/invalid_handler_attribute.rs:3:16
+  |
+3 | #[medi_handler(unknown = [])]
+  |                ^^^^^^^

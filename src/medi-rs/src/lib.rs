@@ -62,6 +62,11 @@
 #[cfg(test)]
 extern crate alloc;
 
+/// Embassy executor re-export used by the generated Embassy integration.
+#[cfg(feature = "embassy")]
+#[doc(hidden)]
+pub use embassy_executor;
+
 /// Compose module-owned mediator manifests into one application mediator.
 ///
 /// Each manifest is declared by [`medi_rs_macros::medi_module!`]. The explicit

@@ -33,7 +33,7 @@ mediator! { pub struct UserMediator { event_queue_capacity: 1; event_workers: 1;
 #[tokio::main]
 async fn main() -> Result<()> {
     let repo = UserRepository::new();
-    UserMediator::new((repo.clone(),))
+    UserMediator::new(repo.clone())
         .send(CreateUser { name: "Ada".into() })
         .await?;
     println!("stored users: {}", repo.len());

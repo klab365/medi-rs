@@ -4,4 +4,6 @@ fn invalid_module_compositions_fail_to_compile() {
     cases.compile_fail("tests/ui/duplicate_command.rs");
     cases.compile_fail("tests/ui/duplicate_resource.rs");
     cases.compile_fail("tests/ui/missing_resource.rs");
+    cases.compile_fail("tests/ui/handler_without_message.rs");
+    cases.compile_fail("tests/ui/invalid_handler_attribute.rs");
 }

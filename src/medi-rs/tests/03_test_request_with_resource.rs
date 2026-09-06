@@ -42,7 +42,7 @@ mediator! {
 #[tokio::test]
 async fn send_should_return_correct_value_from_the_resource() {
     let state = AppState::new();
-    let mediator = ResourceMediator::new((state.clone(),));
+    let mediator = ResourceMediator::new(state.clone());
     mediator.send(Ping("hello".into())).await.unwrap();
     mediator.send(Ping("world".into())).await.unwrap();
     assert_eq!(*state.list.lock().unwrap(), vec!["hello", "world"]);

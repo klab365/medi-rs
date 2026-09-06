@@ -34,9 +34,7 @@ jobs:
         uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
 
       - name: Verify crates can be published
-        run: |
-          version="$(cargo pkgid -p medi-rs | cut -d# -f2)"
-          mise run publish -- "$version" --dry-run --no-verify
+        run: mise run publish -- --dry-run --no-verify
 
   no-runtime:
     name: No runtime feature
@@ -128,6 +126,9 @@ jobs:
 
       - name: Build
         run: mise build embassy
+
+      - name: Check Embassy dependency graph
+        run: mise run check-embassy-dependencies
 
       - name: Lint
         run: mise lint embassy

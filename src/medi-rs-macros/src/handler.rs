@@ -107,6 +107,9 @@ pub fn medi_handler_inner(
     let resource_bounds = resources.iter().zip(&indexes).map(|(resource, index)| {
         quote! { R: ::medi_rs::tlist::Get<#resource, #index>, }
     });
+    // Decorator continuations must be `Send`; when they capture `resources`,
+    // the referenced resource tuple must therefore be `Sync`.
+    let decorator_resource_bound = (!decorators.is_empty()).then(|| quote! { R: Sync, });
     let output = &function.sig.output;
 
     quote! {
@@ -120,6 +123,7 @@ pub fn medi_handler_inner(
         ) #output
         where
             #(#resource_bounds)*
+            #decorator_resource_bound
         {
             #helper_body
         }
