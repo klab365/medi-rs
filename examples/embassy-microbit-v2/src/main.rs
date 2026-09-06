@@ -147,7 +147,7 @@ async fn main(spawner: Spawner) {
         Output::new(p.P0_21, Level::Low, OutputDrive::Standard),
         &OBSERVED_COUNT,
     ));
-    let mediator = MEDIATOR.init(AppMediator::new((board, button)));
+    let mediator = MEDIATOR.init(AppMediator::new(board, button));
     mediator.start(spawner);
 
     info!("medi-rs Embassy micro:bit v2 example started");

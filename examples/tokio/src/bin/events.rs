@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     let outbox = EmailOutbox {
         sent: Arc::new(Mutex::new(Vec::new())),
     };
-    let mediator = Box::leak(Box::new(EventMediator::new((outbox.clone(),))));
+    let mediator = Box::leak(Box::new(EventMediator::new(outbox.clone())));
     mediator.start();
     mediator
         .publish(UserRegistered {

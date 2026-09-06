@@ -55,9 +55,9 @@ mediator! { pub struct GenericMediator { event_queue_capacity: 1; event_workers:
 #[tokio::test]
 async fn send_should_work_with_dependencyinjection() {
     let repo = Arc::new(InMemoryUserRepository::new());
-    let mediator = DynMediator::new((AppStateDyn {
+    let mediator = DynMediator::new(AppStateDyn {
         user_repository: repo.clone(),
-    },));
+    });
     mediator.send(CreateUser { name: "John".into() }).await.unwrap();
     assert_eq!(repo.0.lock().unwrap()[0].name, "John");
 }
@@ -65,9 +65,9 @@ async fn send_should_work_with_dependencyinjection() {
 #[tokio::test]
 async fn send_should_work_with_generic_dependencyinjection() {
     let repo = Arc::new(InMemoryUserRepository::new());
-    let mediator = GenericMediator::new((AppStateGeneric {
+    let mediator = GenericMediator::new(AppStateGeneric {
         user_repository: repo.clone(),
-    },));
+    });
     mediator.send(CreateUser { name: "John".into() }).await.unwrap();
     assert_eq!(repo.0.lock().unwrap()[0].name, "John");
 }

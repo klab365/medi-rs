@@ -1,0 +1,5 @@
+error: a mediator handler requires a message parameter
+ --> tests/ui/handler_without_message.rs:4:1
+  |
+4 | async fn handler_without_message() {}
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

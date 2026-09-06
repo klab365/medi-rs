@@ -90,7 +90,7 @@ fn composition_collects_manifests_from_separate_modules() {
 
 #[tokio::test]
 async fn composition_generates_static_command_routes() {
-    let mediator = AppMediator::new((UserRepository("users"), AuditRepository("audit")));
+    let mediator = AppMediator::new(UserRepository("users"), AuditRepository("audit"));
 
     mediator.send(CreateUser).await.unwrap();
     mediator.send(RecordAudit).await.unwrap();
@@ -99,10 +99,10 @@ async fn composition_generates_static_command_routes() {
 #[tokio::test]
 async fn composition_generates_static_event_routes() {
     EVENT_HANDLERS_RUN.store(0, Ordering::SeqCst);
-    let mediator = Box::leak(Box::new(AppMediator::new((
+    let mediator = Box::leak(Box::new(AppMediator::new(
         UserRepository("users"),
         AuditRepository("audit"),
-    ))));
+    )));
     mediator.start();
 
     mediator.publish(UserCreated).await.unwrap();

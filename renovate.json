@@ -1,0 +1,36 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "dependencyDashboard": true,
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "description": "Update the Embassy ecosystem together",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["/^embassy-/"],
+      "groupName": "Embassy ecosystem",
+      "groupSlug": "embassy"
+    },
+    {
+      "description": "Update Tokio packages together",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["tokio", "/^tokio-/"],
+      "groupName": "Tokio",
+      "groupSlug": "tokio"
+    },
+    {
+      "description": "Update Futures packages together",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["futures", "/^futures-/"],
+      "groupName": "Futures",
+      "groupSlug": "futures"
+    },
+    {
+      "description": "Update WebAssembly packages together",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["/^wasm-bindgen/", "web-sys", "js-sys", "/^gloo-/"],
+      "groupName": "WebAssembly",
+      "groupSlug": "wasm"
+    }
+  ]
+}

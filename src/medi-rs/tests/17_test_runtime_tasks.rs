@@ -42,10 +42,10 @@ mediator! {
 async fn tokio_starts_registered_tasks_with_resources() {
     TASK_STARTED.store(0, Ordering::Release);
     TASK_WITHOUT_MEDIATOR_STARTED.store(0, Ordering::Release);
-    let mediator = Box::leak(Box::new(RuntimeTaskMediator::new((
+    let mediator = Box::leak(Box::new(RuntimeTaskMediator::new(
         TaskState(&TASK_STARTED),
         TaskWithoutMediatorState(&TASK_WITHOUT_MEDIATOR_STARTED),
-    ))));
+    )));
     mediator.start();
 
     tokio::task::yield_now().await;

@@ -20,6 +20,7 @@ mise run format         # cargo fmt --all
 mise run lint           # clippy for no_std, Tokio, and WASM feature sets
 mise run test           # tests for no_std, Tokio, and WASM feature sets
 mise run check-examples # check Tokio and WASM examples
+mise run check-embassy-dependencies # reject duplicate direct Embassy crate versions in every workspace
 mise run run-examples   # run every Tokio example
 mise run check-docs     # build docs for supported feature sets
 mise run coverage       # generate an LCOV coverage report
