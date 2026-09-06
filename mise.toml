@@ -63,15 +63,19 @@ arg "<version>" help="Release version in X.Y.Z format"
 '''
 run = '''
 release_version="${usage_version:?}"
-packages="$(cargo metadata --no-deps --format-version 1 | jq -r '
+packages_file="$(mktemp)"
+trap 'rm -f "$packages_file"' EXIT HUP INT TERM
+
+cargo metadata --no-deps --format-version 1 | jq -r '
   .workspace_members as $members |
   .packages[] |
   select(.id as $id | $members | index($id)) |
   [.name, .version] | @tsv
-')"
-test -n "$packages"
+' > "$packages_file"
+test -s "$packages_file"
 
-while IFS=$'\t' read -r crate version; do
+tab="$(printf '\t')"
+while IFS="$tab" read -r crate version; do
   test "$release_version" = "$version" || {
     echo "$crate is version $version, but the requested release version is $release_version" >&2
     exit 1
@@ -93,7 +97,7 @@ while IFS=$'\t' read -r crate version; do
       exit 1
       ;;
   esac
-done <<< "$packages"
+done < "$packages_file"
 '''
 
 [tasks.check-embassy-dependencies]
