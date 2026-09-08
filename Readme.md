@@ -27,7 +27,7 @@ medi-rs = { version = "1", features = ["tokio"] }
 
 ## Event configuration
 
-Event mediators use a bounded queue. `event_queue_capacity` and `event_workers` must both be greater than zero; publishing waits while the queue is full. Tokio and WebAssembly accept any `usize` expression for the capacity. Embassy uses the capacity as a const generic, so its value must be a const expression such as a literal or named `const`.
+Event mediators use a bounded queue. `event_queue_capacity` and `event_workers` must both be greater than zero. `publish` waits while the queue is full; `try_publish` never waits and returns the event when the queue is full or closed. Tokio and WebAssembly accept any `usize` expression for the capacity. Embassy uses the capacity as a const generic, so its value must be a const expression such as a literal or named `const`.
 
 ## Quick start
 
@@ -177,7 +177,7 @@ mediator! {
 }
 ```
 
-The generated type has `new`, `send`, and, when an event route exists, `publish`, `start`, and `shutdown`. It uses the runtime selected by the enabled `tokio`, `wasm`, or `embassy` feature. The event configuration rules are described in [Event configuration](#event-configuration). `start` requires `'static` mediator storage (`start(spawner)` for Embassy).
+The generated type has `new`, `send`, and, when an event route exists, `publish`, `try_publish`, `start`, and `shutdown`. It uses the runtime selected by the enabled `tokio`, `wasm`, or `embassy` feature. The event configuration rules are described in [Event configuration](#event-configuration). `start` requires `'static` mediator storage (`start(spawner)` for Embassy).
 
 `mediator_composition_marker!` is also exported for internal macro expansion. It is not an application-facing API; use `mediator!` instead.
 
@@ -279,7 +279,7 @@ medi_module! {
 
 ## Events
 
-Events are plain `Clone + Send + 'static` values. List each event route in a module manifest, create a `'static` mediator, and call `start` before publishing. Each generated worker dispatches an event to every registered handler. `publish` waits when the configured bounded queue is full. Event handler errors are currently ignored after dispatch.
+Events are plain `Clone + Send + 'static` values. List each event route in a module manifest, create a `'static` mediator, and call `start` before publishing. Each generated worker dispatches an event to every registered handler. `publish` waits when the configured bounded queue is full. Use `try_publish` when the caller must not wait: it returns `TryPublishError::Full(event)` when capacity is exhausted and `TryPublishError::Closed(event)` after shutdown or when workers are unavailable. Both errors retain the event for retry, persistence, or disposal. Event handler errors are currently ignored after dispatch.
 
 ```rust,no_run
 use medi_rs::{Result, medi_handler, medi_module, mediator};
@@ -300,6 +300,19 @@ async fn run() -> Result<()> {
     mediator.start();
     mediator.publish(UserRegistered).await?;
     Ok(())
+}
+```
+
+For example, an HTTP endpoint can apply its own overload policy without awaiting queue capacity:
+
+```rust,ignore
+use medi_rs::TryPublishError;
+
+let event = UserRegistered;
+match mediator.try_publish(event) {
+    Ok(()) => metrics::counter!("events.enqueued").increment(1),
+    Err(TryPublishError::Full(event)) => persist_for_retry(event).await?,
+    Err(TryPublishError::Closed(_event)) => return Err(AppError::ShuttingDown),
 }
 ```
 

@@ -6,6 +6,11 @@ All notable changes to `medi-rs` are documented here.
 
 ### Added
 
+- Generated event mediators now provide non-blocking `try_publish(event)`.
+  It returns `TryPublishError::Full(event)` when the bounded queue has no
+  capacity and `TryPublishError::Closed(event)` after shutdown, retaining the
+  event for application-defined retry or overload handling. Tokio, Wasm, and
+  Embassy adapters provide the same full/closed semantics.
 - Generated event mediators now provide `shutdown().await`. Shutdown rejects
   new publishes, drains events accepted before shutdown, and waits for event
   workers and registered `#[medi_task]` tasks to return on Tokio, Wasm, and

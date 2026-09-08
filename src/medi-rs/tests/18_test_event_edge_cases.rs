@@ -60,6 +60,16 @@ mod backpressure {
     medi_module! { manifest manifest; events { Event => [discard]; } }
     mediator! { struct Mediator { event_queue_capacity: 1; event_workers: 1; modules: [manifest]; } }
 
+    #[test]
+    fn try_publish_reports_a_full_queue_without_waiting() {
+        let mediator = Mediator::new();
+        assert!(mediator.try_publish(Event).is_ok());
+        assert!(matches!(
+            mediator.try_publish(Event),
+            Err(medi_rs::TryPublishError::Full(Event))
+        ));
+    }
+
     #[tokio::test]
     async fn publish_waits_while_the_bounded_queue_is_full() {
         let mediator = Mediator::new();

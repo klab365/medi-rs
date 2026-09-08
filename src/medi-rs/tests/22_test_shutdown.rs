@@ -49,6 +49,10 @@ async fn shutdown_drains_events_and_rejects_new_publishes() {
         mediator.publish(Event).await,
         Err(Error::EventPublishingError)
     ));
+    assert!(matches!(
+        mediator.try_publish(Event),
+        Err(medi_rs::TryPublishError::Closed(Event))
+    ));
 }
 
 #[tokio::test]

@@ -244,6 +244,13 @@ pub trait StaticPublish<M>: Sized {
     fn publish(self, mediator: &M) -> impl core::future::Future<Output = Result<()>> + Send;
 }
 
+/// Static non-blocking event route generated for an event and a mediator type.
+#[doc(hidden)]
+pub trait StaticTryPublish<M>: Sized {
+    /// Attempt to enqueue this event without waiting for queue capacity.
+    fn try_publish(self, mediator: &M) -> core::result::Result<(), TryPublishError<Self>>;
+}
+
 //-- region: Implement static handler traits
 crate::impl_static_handler!();
 crate::impl_static_handler!(T1: I1);
