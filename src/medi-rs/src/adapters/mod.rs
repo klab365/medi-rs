@@ -1,6 +1,8 @@
 //! Runtime queue and task-spawn adapters for generated mediators.
 
+pub mod lifecycle;
 pub mod queue;
+pub mod shutdown;
 
 #[cfg(feature = "embassy")]
 pub mod embassy;

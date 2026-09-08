@@ -33,9 +33,16 @@ pub fn medi_task_inner(attribute: proc_macro::TokenStream, input: proc_macro::To
             FnArg::Receiver(_) => None,
         })
         .collect();
+    let is_shutdown_signal = |ty: &Type| matches!(ty, Type::Reference(reference) if matches!(reference.elem.as_ref(), Type::Path(path) if path.path.segments.last().is_some_and(|segment| segment.ident == "ShutdownSignal")));
     let (context, resources): (Option<&Type>, Vec<&Type>) = match arguments.first() {
-        Some(Type::Reference(reference)) => (Some(reference.elem.as_ref()), arguments[1..].to_vec()),
+        Some(Type::Reference(reference)) if !is_shutdown_signal(arguments[0]) => {
+            (Some(reference.elem.as_ref()), arguments[1..].to_vec())
+        }
         _ => (None, arguments),
+    };
+    let (signal, resources) = match resources.first() {
+        Some(_) if is_shutdown_signal(resources[0]) => (true, resources[1..].to_vec()),
+        _ => (false, resources),
     };
     let indexes: Vec<Ident> = (0..resources.len()).map(|index| format_ident!("I{index}")).collect();
     let call_arguments = resources.iter().zip(&indexes).map(|(resource, index)| {
@@ -54,9 +61,17 @@ pub fn medi_task_inner(attribute: proc_macro::TokenStream, input: proc_macro::To
         quote! { <M, R, #(#indexes,)*> }
     };
     let task_call = if context.is_some() {
-        quote! { #name(mediator, #(#call_arguments,)*).await }
+        if signal {
+            quote! { #name(mediator, signal, #(#call_arguments,)*).await }
+        } else {
+            quote! { #name(mediator, #(#call_arguments,)*).await }
+        }
     } else {
-        quote! { #name(#(#call_arguments,)*).await }
+        if signal {
+            quote! { #name(signal, #(#call_arguments,)*).await }
+        } else {
+            quote! { #name(#(#call_arguments,)*).await }
+        }
     };
 
     quote! {
@@ -66,6 +81,7 @@ pub fn medi_task_inner(attribute: proc_macro::TokenStream, input: proc_macro::To
         pub(crate) async fn #helper #helper_generics(
             #mediator_parameter
             resources: &R,
+            signal: &'static ::medi_rs::ShutdownSignal,
         )
         where
             #(#resource_bounds)*

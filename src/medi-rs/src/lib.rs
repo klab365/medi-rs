@@ -156,7 +156,9 @@ mod resource;
 pub mod tlist;
 
 // flatten the module structure
+pub use adapters::lifecycle::Lifecycle;
 pub use adapters::queue::EventQueue;
+pub use adapters::shutdown::ShutdownSignal;
 pub use error::*;
 pub use handler::*;
 
