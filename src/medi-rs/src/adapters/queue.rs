@@ -4,7 +4,7 @@
 //! the [`mediator!`](crate::mediator!) macro can enqueue and
 //! dequeue typed events without coupling to a specific channel backend.
 
-use crate::Result;
+use crate::{Result, TryPublishError};
 use core::future::Future;
 
 /// Async queue used by generated mediators to enqueue events and dequeue
@@ -27,6 +27,12 @@ pub trait EventQueue<T>: Send + Sync + 'static {
     /// Returns [`Error::EventPublishingError`](crate::Error::EventPublishingError)
     /// if the channel is closed or full.
     fn publish(&self, item: T) -> impl Future<Output = Result<()>> + Send;
+
+    /// Attempt to enqueue an item without waiting for queue capacity.
+    ///
+    /// Returns the original item in [`TryPublishError`] when the queue is
+    /// full or no longer accepts events.
+    fn try_publish(&self, item: T) -> core::result::Result<(), TryPublishError<T>>;
 
     /// Stop accepting new items.
     ///

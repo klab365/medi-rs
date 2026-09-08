@@ -268,6 +268,15 @@ pub(crate) fn generate_event_support(
                 fn publish(self, mediator: &#name) -> impl core::future::Future<Output = ::medi_rs::Result<()>> + Send {
                     ::medi_rs::EventQueue::publish(&mediator.event_queue, #job::#variant(self))
                 }
+            }
+            impl ::medi_rs::StaticTryPublish<#name> for #event where #event: Clone + Send + 'static {
+                fn try_publish(self, mediator: &#name) -> core::result::Result<(), ::medi_rs::TryPublishError<Self>> {
+                    match ::medi_rs::EventQueue::try_publish(&mediator.event_queue, #job::#variant(self.clone())) {
+                        Ok(()) => Ok(()),
+                        Err(::medi_rs::TryPublishError::Full(_)) => Err(::medi_rs::TryPublishError::Full(self)),
+                        Err(::medi_rs::TryPublishError::Closed(_)) => Err(::medi_rs::TryPublishError::Closed(self)),
+                    }
+                }
             } }
         })
         .collect();
@@ -317,6 +326,11 @@ pub(crate) fn generate_event_support(
         publish_routes: quote! { #(#publish_routes)* },
         publish_method: quote! { /// Enqueue an event for later worker dispatch.
         pub async fn publish<E>(&self, event: E) -> ::medi_rs::Result<()> where E: ::medi_rs::StaticPublish<Self> { event.publish(self).await }
+        /// Attempt to enqueue an event without waiting for queue capacity.
+        ///
+        /// On failure, the returned error contains the event for retry or
+        /// application-specific overload handling.
+        pub fn try_publish<E>(&self, event: E) -> core::result::Result<(), ::medi_rs::TryPublishError<E>> where E: ::medi_rs::StaticTryPublish<Self> { event.try_publish(self) }
         /// Stop accepting events, drain accepted events, and wait for all event
         /// workers and registered runtime tasks to return.
         pub async fn shutdown(&self) -> ::medi_rs::Result<()> {

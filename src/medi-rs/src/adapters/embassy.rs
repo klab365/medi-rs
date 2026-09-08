@@ -1,5 +1,4 @@
-use crate::Error;
-use crate::Result;
+use crate::{Error, Result, TryPublishError};
 use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
@@ -25,6 +24,14 @@ impl<T: Send + 'static, const CAPACITY: usize> crate::EventQueue<T> for EmbassyE
             // The item was accepted before shutdown and must be drained.
         }
         Ok(())
+    }
+    fn try_publish(&self, item: T) -> core::result::Result<(), TryPublishError<T>> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(TryPublishError::Closed(item));
+        }
+        self.channel.try_send(item).map_err(|error| match error {
+            embassy_sync::channel::TrySendError::Full(item) => TryPublishError::Full(item),
+        })
     }
     async fn close(&self) {
         self.closed.store(true, Ordering::Release);
