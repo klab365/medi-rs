@@ -2,6 +2,17 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## Unreleased
+
+### Added
+
+- Generated event mediators now provide `shutdown().await`. Shutdown rejects
+  new publishes, drains events accepted before shutdown, and waits for event
+  workers and registered `#[medi_task]` tasks to return on Tokio, Wasm, and
+  Embassy.
+- `#[medi_task]` functions can declare an injected `&ShutdownSignal`, which
+  `shutdown()` cancels before waiting for task completion.
+
 ## 2.1.0
 
 ### Changed

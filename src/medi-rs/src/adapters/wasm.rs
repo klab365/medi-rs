@@ -1,4 +1,3 @@
-use crate::{Error, Result};
 use core::future::Future;
 use futures::lock::Mutex;
 use futures::{SinkExt, StreamExt, channel::mpsc};
@@ -11,32 +10,11 @@ where
     spawn_local(future);
 }
 
-pub struct WasmEventQueue<T> {
-    sender: Mutex<mpsc::Sender<T>>,
-    receiver: Mutex<mpsc::Receiver<T>>,
-}
-impl<T: Send + 'static> crate::EventQueue<T> for WasmEventQueue<T> {
-    fn new(capacity: Option<usize>) -> Self {
-        let (sender, receiver) = mpsc::channel(capacity.unwrap_or(1024));
-        Self {
-            sender: Mutex::new(sender),
-            receiver: Mutex::new(receiver),
-        }
-    }
-    async fn publish(&self, item: T) -> Result<()> {
-        self.sender
-            .lock()
-            .await
-            .send(item)
-            .await
-            .map_err(|_| Error::EventPublishingError)
-    }
-    async fn recv(&self) -> Result<T> {
-        self.receiver
-            .lock()
-            .await
-            .next()
-            .await
-            .ok_or(Error::EventProcessingError)
-    }
-}
+impl_event_queue!(
+    WasmEventQueue,
+    sender: mpsc::Sender<T>,
+    sender_binding: sender [mut],
+    receiver: mpsc::Receiver<T>,
+    channel: |capacity| mpsc::channel(capacity.unwrap_or(1024)),
+    receive: |receiver| receiver.next().await,
+);

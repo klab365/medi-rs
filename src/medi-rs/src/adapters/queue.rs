@@ -28,6 +28,17 @@ pub trait EventQueue<T>: Send + Sync + 'static {
     /// if the channel is closed or full.
     fn publish(&self, item: T) -> impl Future<Output = Result<()>> + Send;
 
+    /// Stop accepting new items.
+    ///
+    /// Items for which [`Self::publish`] has already returned `Ok(())` remain
+    /// available to receivers. Generated shutdown then enqueues internal
+    /// worker-control items behind that accepted work.
+    fn close(&self) -> impl Future<Output = ()> + Send;
+
+    /// Enqueue an internal worker-control item after closure.
+    #[doc(hidden)]
+    fn publish_internal(&self, item: T) -> impl Future<Output = Result<()>> + Send;
+
     /// Dequeue the next item.
     ///
     /// Returns [`Error::EventProcessingError`](crate::Error::EventProcessingError)

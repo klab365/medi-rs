@@ -49,7 +49,12 @@ pub(crate) fn generate_constructor(
     resource_values: &proc_macro2::TokenStream,
     has_events: bool,
     capacity: &Expr,
+    task_count: usize,
 ) -> proc_macro2::TokenStream {
+    let task_shutdown_fields = (0..task_count).map(|index| {
+        let field = format_ident!("task_shutdown_{index}");
+        quote! { #field: ::medi_rs::ShutdownSignal::new(), }
+    });
     let configuration_check = quote! {
         assert!(#capacity > 0, "event_queue_capacity must be greater than zero");
     };
@@ -58,39 +63,67 @@ pub(crate) fn generate_constructor(
             /// Construct a mediator with no typed resources.
             pub fn new() -> Self {
                 #configuration_check
-                Self { resources: (), event_queue: ::medi_rs::EventQueue::new(Some(#capacity)) }
+                Self {
+                    resources: (),
+                    event_queue: ::medi_rs::EventQueue::new(Some(#capacity)),
+                    #(#task_shutdown_fields)*
+                    lifecycle: ::medi_rs::Lifecycle::new(),
+                }
             }
         },
         (true, false) => quote! {
             /// Construct a mediator with no typed resources.
-            pub const fn new() -> Self { Self { resources: () } }
+            pub fn new() -> Self {
+                Self { resources: (), #(#task_shutdown_fields)* lifecycle: ::medi_rs::Lifecycle::new() }
+            }
         },
         (false, true) => quote! {
             /// Construct a mediator from its declared resource values.
             pub fn new(#(#resource_names: #resource_types),*) -> Self {
                 #configuration_check
-                Self { resources: #resource_values, event_queue: ::medi_rs::EventQueue::new(Some(#capacity)) }
+                Self {
+                    resources: #resource_values,
+                    event_queue: ::medi_rs::EventQueue::new(Some(#capacity)),
+                    #(#task_shutdown_fields)*
+                    lifecycle: ::medi_rs::Lifecycle::new(),
+                }
             }
         },
         (false, false) => quote! {
             /// Construct a mediator from its declared resource values.
             pub fn new(#(#resource_names: #resource_types),*) -> Self {
-                Self { resources: #resource_values }
+                Self { resources: #resource_values, #(#task_shutdown_fields)* lifecycle: ::medi_rs::Lifecycle::new() }
             }
         },
     }
 }
 
 pub(crate) fn generate_task_workers(tasks: &[syn::Path], name: &Ident) -> Vec<proc_macro2::TokenStream> {
-    tasks.iter().enumerate().map(|(index, task)| {
-        let worker = format_ident!("medi_rs_task_{index}");
-        let invoker = task_invoker_path(task);
-        if cfg!(feature = "embassy") {
-            quote! { #[::medi_rs::embassy_executor::task] async fn #worker(mediator: &'static #name) { #invoker(mediator, &mediator.resources).await; } }
-        } else {
-            quote! { async fn #worker(mediator: &'static #name) { #invoker(mediator, &mediator.resources).await; } }
-        }
-    }).collect()
+    tasks
+        .iter()
+        .enumerate()
+        .map(|(index, task)| {
+            let worker = format_ident!("medi_rs_task_{index}");
+            let task_shutdown = format_ident!("task_shutdown_{index}");
+            let invoker = task_invoker_path(task);
+            if cfg!(feature = "embassy") {
+                quote! {
+                    #[::medi_rs::embassy_executor::task]
+                    async fn #worker(mediator: &'static #name) {
+                        #invoker(mediator, &mediator.resources, &mediator.#task_shutdown).await;
+                        mediator.lifecycle.finish();
+                    }
+                }
+            } else {
+                quote! {
+                    async fn #worker(mediator: &'static #name) {
+                        #invoker(mediator, &mediator.resources, &mediator.#task_shutdown).await;
+                        mediator.lifecycle.finish();
+                    }
+                }
+            }
+        })
+        .collect()
 }
 
 pub(crate) fn generate_task_spawns(tasks: &[syn::Path]) -> Vec<proc_macro2::TokenStream> {
@@ -100,9 +133,19 @@ pub(crate) fn generate_task_spawns(tasks: &[syn::Path]) -> Vec<proc_macro2::Toke
         .map(|(index, _)| {
             let worker = format_ident!("medi_rs_task_{index}");
             if cfg!(feature = "embassy") {
-                quote! { if let Ok(token) = #worker(self) { spawner.spawn(token); } }
+                quote! {
+                    self.lifecycle.begin();
+                    if let Ok(token) = #worker(self) {
+                        spawner.spawn(token);
+                    } else {
+                        self.lifecycle.finish();
+                    }
+                }
             } else {
-                quote! { ::medi_rs::adapters::selected::spawn(#worker(self)); }
+                quote! {
+                    self.lifecycle.begin();
+                    ::medi_rs::adapters::selected::spawn(#worker(self));
+                }
             }
         })
         .collect()
@@ -172,7 +215,14 @@ fn generate_event_start(
             pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
                 let event_workers = Self::EVENT_WORKERS;
-                for _ in 0..event_workers { if let Ok(token) = #worker(self) { spawner.spawn(token); } }
+                for _ in 0..event_workers {
+                    self.lifecycle.begin();
+                    if let Ok(token) = #worker(self) {
+                        spawner.spawn(token);
+                    } else {
+                        self.lifecycle.finish();
+                    }
+                }
                 #(#task_spawns)*
             }
         }
@@ -182,7 +232,10 @@ fn generate_event_start(
             pub fn start(&'static self) where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
                 let event_workers = Self::EVENT_WORKERS;
-                for _ in 0..event_workers { ::medi_rs::adapters::selected::spawn(#worker(self)); }
+                for _ in 0..event_workers {
+                    self.lifecycle.begin();
+                    ::medi_rs::adapters::selected::spawn(#worker(self));
+                }
                 #(#task_spawns)*
             }
         }
@@ -220,26 +273,64 @@ pub(crate) fn generate_event_support(
         .collect();
     let dispatch_arms = generate_event_dispatch_arms(routes, job, decorators);
     let worker = format_ident!("medi_rs_event_worker");
-    let worker_loop = quote! { loop { match ::medi_rs::EventQueue::recv(&mediator.event_queue).await {
-        Ok(event) => match event { #(#dispatch_arms)* }, Err(_) => break,
-    } } };
+    let worker_loop = quote! {
+        loop {
+            match ::medi_rs::EventQueue::recv(&mediator.event_queue).await {
+                Ok(#job::Shutdown) | Err(_) => break,
+                Ok(event) => match event {
+                    #(#dispatch_arms)*
+                    #job::Shutdown => break,
+                },
+            }
+        }
+        mediator.lifecycle.finish();
+    };
     let worker_function = if cfg!(feature = "embassy") {
-        quote! { #[allow(non_snake_case)] #[::medi_rs::embassy_executor::task] async fn #worker(mediator: &'static #name) { #worker_loop } }
+        quote! {
+            #[allow(non_snake_case)]
+            #[::medi_rs::embassy_executor::task]
+            async fn #worker(mediator: &'static #name) {
+                #worker_loop
+            }
+        }
     } else {
-        quote! { #[allow(non_snake_case)] async fn #worker(mediator: &'static #name) { #worker_loop } }
+        quote! {
+            #[allow(non_snake_case)]
+            async fn #worker(mediator: &'static #name) {
+                #worker_loop
+            }
+        }
     };
     let queue_type = if cfg!(feature = "embassy") {
         quote! { ::medi_rs::adapters::selected::EventQueue<#job, { #capacity }> }
     } else {
         quote! { ::medi_rs::adapters::selected::EventQueue<#job> }
     };
+    let task_cancellations = (0..task_spawns.len()).map(|index| {
+        let field = format_ident!("task_shutdown_{index}");
+        quote! { self.#field.cancel(); }
+    });
     let start = generate_event_start(resource_tuple, &worker, task_spawns);
     EventSupport {
-        job: quote! { #[allow(non_camel_case_types)] enum #job { #(#variants,)* } },
+        job: quote! { #[allow(non_camel_case_types)] enum #job { #(#variants,)* Shutdown } },
         field: quote! { event_queue: #queue_type, },
         publish_routes: quote! { #(#publish_routes)* },
         publish_method: quote! { /// Enqueue an event for later worker dispatch.
-        pub async fn publish<E>(&self, event: E) -> ::medi_rs::Result<()> where E: ::medi_rs::StaticPublish<Self> { event.publish(self).await } },
+        pub async fn publish<E>(&self, event: E) -> ::medi_rs::Result<()> where E: ::medi_rs::StaticPublish<Self> { event.publish(self).await }
+        /// Stop accepting events, drain accepted events, and wait for all event
+        /// workers and registered runtime tasks to return.
+        pub async fn shutdown(&self) -> ::medi_rs::Result<()> {
+            if self.lifecycle.request_shutdown() {
+                #(#task_cancellations)*
+                ::medi_rs::EventQueue::close(&self.event_queue).await;
+                let event_workers = Self::EVENT_WORKERS;
+                for _ in 0..event_workers {
+                    ::medi_rs::EventQueue::publish_internal(&self.event_queue, #job::Shutdown).await?;
+                }
+            }
+            self.lifecycle.wait().await;
+            Ok(())
+        } },
         worker: quote! { #worker_function impl #name { #start } },
     }
 }
@@ -254,11 +345,35 @@ pub(crate) fn generate_task_only_start(
     if has_events || !has_tasks {
         return quote! {};
     }
+    let task_cancellations = (0..task_spawns.len()).map(|index| {
+        let field = format_ident!("task_shutdown_{index}");
+        quote! { self.#field.cancel(); }
+    });
     if cfg!(feature = "embassy") {
-        quote! { impl #name { /// Start the registered Embassy tasks.
-        pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) where #resource_tuple: Sync { #(#task_spawns)* } } }
+        quote! { impl #name {
+            /// Start the registered Embassy tasks.
+            pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) where #resource_tuple: Sync { #(#task_spawns)* }
+            /// Signal registered runtime tasks and wait for them to return.
+            pub async fn shutdown(&self) -> ::medi_rs::Result<()> {
+                if self.lifecycle.request_shutdown() {
+                    #(#task_cancellations)*
+                }
+                self.lifecycle.wait().await;
+                Ok(())
+            }
+        } }
     } else {
-        quote! { impl #name { /// Start the registered runtime tasks.
-        pub fn start(&'static self) where #resource_tuple: Sync { #(#task_spawns)* } } }
+        quote! { impl #name {
+            /// Start the registered runtime tasks.
+            pub fn start(&'static self) where #resource_tuple: Sync { #(#task_spawns)* }
+            /// Signal registered runtime tasks and wait for them to return.
+            pub async fn shutdown(&self) -> ::medi_rs::Result<()> {
+                if self.lifecycle.request_shutdown() {
+                    #(#task_cancellations)*
+                }
+                self.lifecycle.wait().await;
+                Ok(())
+            }
+        } }
     }
 }

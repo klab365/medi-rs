@@ -181,6 +181,7 @@ pub fn mediator_composition_marker_inner(input: proc_macro::TokenStream) -> proc
         &resource_values,
         has_events,
         &input.event_queue_capacity,
+        tasks.len(),
     );
     let job_name = format_ident!("{}EventJob", input.name);
     let event_support = has_events.then(|| {
@@ -216,6 +217,10 @@ pub fn mediator_composition_marker_inner(input: proc_macro::TokenStream) -> proc
         &resource_tuple,
         &task_spawns,
     );
+    let task_shutdown_fields = (0..tasks.len()).map(|index| {
+        let field = format_ident!("task_shutdown_{index}");
+        quote! { #field: ::medi_rs::ShutdownSignal, }
+    });
     let vis = input.vis;
     let name = input.name;
     let capacity = input.event_queue_capacity;
@@ -223,7 +228,7 @@ pub fn mediator_composition_marker_inner(input: proc_macro::TokenStream) -> proc
     let count = input.count;
     quote! {
         #event_job
-        #vis struct #name { resources: #resource_tuple, #event_field }
+        #vis struct #name { resources: #resource_tuple, #event_field #(#task_shutdown_fields)* lifecycle: ::medi_rs::Lifecycle }
         impl #name {
             #constructor
             /// Configured capacity for the generated event queue.

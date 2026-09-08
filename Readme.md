@@ -177,7 +177,7 @@ mediator! {
 }
 ```
 
-The generated type has `new`, `send`, and, when an event route exists, `publish` and `start`. It uses the runtime selected by the enabled `tokio`, `wasm`, or `embassy` feature. The event configuration rules are described in [Event configuration](#event-configuration). `start` requires `'static` mediator storage (`start(spawner)` for Embassy).
+The generated type has `new`, `send`, and, when an event route exists, `publish`, `start`, and `shutdown`. It uses the runtime selected by the enabled `tokio`, `wasm`, or `embassy` feature. The event configuration rules are described in [Event configuration](#event-configuration). `start` requires `'static` mediator storage (`start(spawner)` for Embassy).
 
 `mediator_composition_marker!` is also exported for internal macro expansion. It is not an application-facing API; use `mediator!` instead.
 
@@ -255,12 +255,16 @@ Use `Option<T>` in `resources { ... }` only when a dependency is optional for th
 
 ### Runtime tasks
 
-With a runtime feature, `#[medi_task]` creates a task with the same typed resource injection as a handler. It may take `&AppMediator` as its first parameter when it needs mediator access; remaining value parameters are declared resources. Register it in a `tasks` section. `mediator.start(spawner)` starts tasks on Embassy; `mediator.start()` does so on Tokio and Wasm.
+With a runtime feature, `#[medi_task]` creates a task with the same typed resource injection as a handler. It may take `&AppMediator` as its first parameter when it needs mediator access. It may then take `&ShutdownSignal`; this is injected by the mediator and is cancelled by `mediator.shutdown()`. Remaining value parameters are declared resources. Register it in a `tasks` section. `mediator.start(spawner)` starts tasks on Embassy; `mediator.start()` does so on Tokio and Wasm.
 
 ```rust,ignore
 #[medi_task]
-async fn watch_button(mediator: &AppMediator, board: BoardApi) {
+async fn watch_button(mediator: &AppMediator, signal: &ShutdownSignal, board: BoardApi) {
     loop {
+        // Select the runtime-specific work future against signal.cancelled().
+        if signal.is_shutdown() {
+            break;
+        }
         board.wait_for_button_a().await;
         let _ = mediator.send(ButtonPressed).await;
     }
@@ -298,6 +302,27 @@ async fn run() -> Result<()> {
     Ok(())
 }
 ```
+
+### Shutdown
+
+`shutdown().await` closes the event queue, so subsequent `publish` calls return `Error::EventPublishingError`. It then drains every event whose `publish` already returned `Ok(())` and waits until all event workers and registered `#[medi_task]` tasks have returned. Tasks are cooperative: a task that runs indefinitely must return for shutdown to complete.
+
+Tokio and Wasm spawn workers when `start()` is called; await `shutdown()` before dropping the runtime or application state. Embassy starts workers with `start(spawner)` from `'static` storage and uses the same awaited shutdown API.
+
+Call shutdown as part of application teardown, after stopping external sources of work such as HTTP servers, message consumers, or timers. This prevents the application from attempting publishes that shutdown will reject:
+
+```rust,ignore
+// First stop accepting new requests from outside the application.
+server.stop_accepting().await;
+
+// Then reject new mediator events and wait for accepted work to finish.
+mediator.shutdown().await?;
+
+// Mediator workers and runtime tasks have returned; dependencies may now close.
+repository.close().await?;
+```
+
+Do not call `shutdown` from an event handler or a `#[medi_task]` belonging to the same mediator: it waits for that handler or task to return and would deadlock. Long-running tasks should declare `signal: &ShutdownSignal` and return when `signal.cancelled().await` completes (or check `signal.is_shutdown()` between short work units); otherwise `shutdown().await` continues waiting for them.
 
 For Embassy, initialize the mediator in a `StaticCell` and call `mediator.start(spawner)`. The Embassy integration requires `embassy-executor` 0.10 (with the platform feature appropriate for the target, such as `platform-cortex-m`). See the micro:bit example below.
 
