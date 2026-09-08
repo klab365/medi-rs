@@ -5,48 +5,58 @@ macro_rules! impl_event_queue {
     (
         $queue:ident,
         sender: $sender:ty,
-        sender_binding: $sender_name:ident [$($sender_mut:tt)*],
         receiver: $receiver:ty,
         channel: |$capacity:ident| $channel:expr,
+        send: |$send_sender:ident, $send_item:ident| $send:expr,
+        try_send: |$try_sender:ident, $try_item:ident| $try_send:expr,
         receive: |$receiver_name:ident| $receive:expr $(,)?
     ) => {
         pub struct $queue<T> {
-            sender: Mutex<($sender, bool)>,
+            sender: $sender,
             receiver: Mutex<$receiver>,
+            gate: Mutex<()>,
+            closed: AtomicBool,
         }
 
         impl<T: Send + 'static> crate::EventQueue<T> for $queue<T> {
             fn new($capacity: Option<usize>) -> Self {
                 let (sender, receiver) = $channel;
                 Self {
-                    sender: Mutex::new((sender, false)),
+                    sender,
                     receiver: Mutex::new(receiver),
+                    gate: Mutex::new(()),
+                    closed: AtomicBool::new(false),
                 }
             }
 
             async fn publish(&self, item: T) -> crate::Result<()> {
-                let $($sender_mut)* $sender_name = self.sender.lock().await;
-                if $sender_name.1 {
+                let _gate = self.gate.lock().await;
+                if self.closed.load(Ordering::Acquire) {
                     return Err(crate::Error::EventPublishingError);
                 }
-                $sender_name
-                    .0
-                    .send(item)
-                    .await
-                    .map_err(|_| crate::Error::EventPublishingError)
+                let $send_sender = &self.sender;
+                let $send_item = item;
+                ($send).await.map_err(|_| crate::Error::EventPublishingError)
+            }
+
+            fn try_publish(&self, item: T) -> core::result::Result<(), crate::TryPublishError<T>> {
+                if self.closed.load(Ordering::Acquire) {
+                    return Err(crate::TryPublishError::Closed(item));
+                }
+                let $try_sender = &self.sender;
+                let $try_item = item;
+                $try_send
             }
 
             async fn close(&self) {
-                self.sender.lock().await.1 = true;
+                let _gate = self.gate.lock().await;
+                self.closed.store(true, Ordering::Release);
             }
 
             async fn publish_internal(&self, item: T) -> crate::Result<()> {
-                let $($sender_mut)* $sender_name = self.sender.lock().await;
-                $sender_name
-                    .0
-                    .send(item)
-                    .await
-                    .map_err(|_| crate::Error::EventPublishingError)
+                let $send_sender = &self.sender;
+                let $send_item = item;
+                ($send).await.map_err(|_| crate::Error::EventPublishingError)
             }
 
             async fn recv(&self) -> crate::Result<T> {
