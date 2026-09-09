@@ -25,9 +25,6 @@ pub fn derive_medi_command_inner(input: proc_macro::TokenStream) -> proc_macro::
     let expanded = quote! {
         impl #impl_generics ::medi_rs::Command for #name #ty_generics #where_clause {
             type Response = #return_type;
-        }
-
-        impl #impl_generics ::medi_rs::StaticCommand for #name #ty_generics #where_clause {
             type Error = #error_type;
         }
     };
