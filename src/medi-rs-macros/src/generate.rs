@@ -32,6 +32,11 @@ pub(crate) struct EventSupport {
     pub(crate) worker: proc_macro2::TokenStream,
 }
 
+pub(crate) struct EventDispatchConfig<'a> {
+    pub(crate) decorators: &'a [Path],
+    pub(crate) event_failure_reporter: Option<&'a Type>,
+}
+
 pub(crate) fn collect_tasks(modules: &[ModuleManifest]) -> Vec<syn::Path> {
     modules.iter().flat_map(|module| module.tasks.iter().cloned()).collect()
 }
@@ -50,6 +55,7 @@ pub(crate) fn generate_constructor(
     has_events: bool,
     capacity: &Expr,
     task_count: usize,
+    event_failure_reporter: Option<&Type>,
 ) -> proc_macro2::TokenStream {
     let task_shutdown_fields = (0..task_count).map(|index| {
         let field = format_ident!("task_shutdown_{index}");
@@ -58,6 +64,7 @@ pub(crate) fn generate_constructor(
     let configuration_check = quote! {
         assert!(#capacity > 0, "event_queue_capacity must be greater than zero");
     };
+    let reporter_value = event_failure_reporter.map(|reporter| quote! { event_failure_reporter: #reporter, });
     match (resource_types.is_empty(), has_events) {
         (true, true) => quote! {
             /// Construct a mediator with no typed resources.
@@ -66,6 +73,7 @@ pub(crate) fn generate_constructor(
                 Self {
                     resources: (),
                     event_queue: ::medi_rs::EventQueue::new(Some(#capacity)),
+                    #reporter_value
                     #(#task_shutdown_fields)*
                     lifecycle: ::medi_rs::Lifecycle::new(),
                 }
@@ -84,6 +92,7 @@ pub(crate) fn generate_constructor(
                 Self {
                     resources: #resource_values,
                     event_queue: ::medi_rs::EventQueue::new(Some(#capacity)),
+                    #reporter_value
                     #(#task_shutdown_fields)*
                     lifecycle: ::medi_rs::Lifecycle::new(),
                 }
@@ -180,11 +189,12 @@ fn generate_event_dispatch_arms(
     routes: &[(Type, Vec<syn::Path>)],
     job: &Ident,
     decorators: &[Path],
+    has_failure_reporter: bool,
 ) -> Vec<proc_macro2::TokenStream> {
     routes
         .iter()
         .enumerate()
-        .map(|(index, (_, handlers))| {
+        .map(|(index, (event_type, handlers))| {
             let variant = format_ident!("Event{index}");
             let calls = handlers.iter().map(|handler| {
                 let invoker = handler_invoker_path(handler);
@@ -197,7 +207,18 @@ fn generate_event_dispatch_arms(
                         &quote! { #invoker(mediator, &mediator.resources, message).await },
                     )
                 };
-                quote! { let _ = #invocation; }
+                if has_failure_reporter {
+                    quote! {
+                        if (#invocation).is_err() {
+                            ::medi_rs::EventFailureReporter::report(
+                                &mediator.event_failure_reporter,
+                                ::medi_rs::EventHandlerFailure::new(stringify!(#event_type), stringify!(#handler)),
+                            ).await;
+                        }
+                    }
+                } else {
+                    quote! { let _ = #invocation; }
+                }
             });
             quote! { #job::#variant(event) => { #(#calls)* } }
         })
@@ -258,7 +279,7 @@ pub(crate) fn generate_event_support(
     job: &Ident,
     capacity: &Expr,
     resource_tuple: &proc_macro2::TokenStream,
-    decorators: &[Path],
+    config: EventDispatchConfig<'_>,
     task_spawns: &[proc_macro2::TokenStream],
 ) -> EventSupport {
     let variants: Vec<_> = routes
@@ -290,7 +311,8 @@ pub(crate) fn generate_event_support(
             } }
         })
         .collect();
-    let dispatch_arms = generate_event_dispatch_arms(routes, job, decorators);
+    let dispatch_arms =
+        generate_event_dispatch_arms(routes, job, config.decorators, config.event_failure_reporter.is_some());
     let worker = format_ident!("medi_rs_event_worker");
     let worker_loop = quote! {
         loop {

@@ -2,10 +2,16 @@
 
 All notable changes to `medi-rs` are documented here.
 
-## Unreleased
+## 2.2.0
 
 ### Added
 
+- Event mediators can now configure `event_failure_reporter: ReporterType;`.
+  The generated worker invokes `EventFailureReporter` once for every failed
+  event handler while continuing to dispatch the remaining handlers. The
+  reporter receives `EventHandlerFailure` event and handler metadata; concrete
+  handler errors remain route-local because event routes need not share an
+  error type.
 - Generated mediators now expose `is_started()` and make `start()` idempotency
   explicit: the first call starts event workers and `#[medi_task]` tasks, while
   later calls return `StartError::AlreadyStarted` without spawning duplicate

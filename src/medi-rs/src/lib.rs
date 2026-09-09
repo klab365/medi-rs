@@ -73,6 +73,8 @@ pub use embassy_executor;
 /// list is the application's routing boundary: only listed modules participate
 /// in the generated mediator. Optionally, `decorators: [logging]` applies each
 /// listed decorator function to every command and event handler route.
+/// `event_failure_reporter: reporter;` observes failed event handlers without
+/// changing delivery to the remaining handlers.
 #[macro_export]
 macro_rules! mediator {
     (
@@ -81,6 +83,7 @@ macro_rules! mediator {
             event_workers: $workers:expr;
             modules: [$first:ident $(, $rest:ident)* $(,)?];
             $(decorators: [$($decorators:path),* $(,)?];)?
+            $(event_failure_reporter: $reporter:ty;)?
         }
     ) => {
         $first!($crate::__medi_rs_collect_modules, {
@@ -89,6 +92,7 @@ macro_rules! mediator {
             event_workers: $workers;
             modules: [];
             decorators: [$($($decorators),*)?];
+            event_failure_reporter: [$($reporter)?];
             count: [];
             remaining: [$($rest),*];
         });
@@ -105,15 +109,17 @@ macro_rules! __medi_rs_collect_modules {
         event_workers: $workers:expr;
         modules: [$($modules:tt)*];
         decorators: [$($decorators:path),*];
+        event_failure_reporter: [$($reporter:ty)?];
         count: [$($count:tt)*];
         remaining: [];
     ) => {
-        $crate::mediator_composition_marker! {
+        $crate::__medi_rs_finalize_composition! {
             $vis struct $name;
             event_queue_capacity: $capacity;
             event_workers: $workers;
             modules: [$($modules)*];
             decorators: [$($decorators),*];
+            event_failure_reporter: [$($reporter)?];
             count: [$($count)*];
         }
     };
@@ -123,6 +129,7 @@ macro_rules! __medi_rs_collect_modules {
         event_workers: $workers:expr;
         modules: [$($modules:tt)*];
         decorators: [$($decorators:path),*];
+        event_failure_reporter: [$($reporter:ty)?];
         count: [$($count:tt)*];
         remaining: [$next:ident $(, $rest:ident)*];
     ) => {
@@ -132,6 +139,7 @@ macro_rules! __medi_rs_collect_modules {
             event_workers: $workers;
             modules: [$($modules)*];
             decorators: [$($decorators),*];
+            event_failure_reporter: [$($reporter)?];
             count: [$($count)*];
             remaining: [$($rest),*];
         });
@@ -162,7 +170,52 @@ pub use adapters::shutdown::ShutdownSignal;
 pub use error::*;
 pub use handler::*;
 
-pub use medi_rs_macros::{MediCommand, medi_handler, medi_module, medi_task, mediator_composition_marker};
+pub use medi_rs_macros::{__medi_rs_finalize_composition, MediCommand, medi_handler, medi_module, medi_task};
+
+/// Metadata about a failed asynchronous event-handler invocation.
+///
+/// Event handlers may use unrelated error types, so this deliberately contains
+/// route metadata rather than the handler's concrete error value. Reporters
+/// can use it for logging, metrics, and alerting without imposing a common
+/// application error type on every event route.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EventHandlerFailure {
+    event_name: &'static str,
+    handler_name: &'static str,
+}
+
+impl EventHandlerFailure {
+    /// Create failure metadata for an event route and handler.
+    #[doc(hidden)]
+    pub const fn new(event_name: &'static str, handler_name: &'static str) -> Self {
+        Self {
+            event_name,
+            handler_name,
+        }
+    }
+
+    /// The registered event type as written in its module manifest.
+    pub const fn event_name(self) -> &'static str {
+        self.event_name
+    }
+
+    /// The registered handler path as written in its module manifest.
+    pub const fn handler_name(self) -> &'static str {
+        self.handler_name
+    }
+}
+
+/// Observes failures from generated asynchronous event-handler dispatch.
+///
+/// A reporter is configured with `event_failure_reporter:` in [`mediator!`].
+/// It is awaited once for each failed handler, but reporting never prevents
+/// dispatch to later handlers. The returned future must be `Send` so the same
+/// reporter works with Tokio workers; `async fn` implementations satisfy this
+/// when their future is `Send`.
+pub trait EventFailureReporter: Send + Sync + 'static {
+    /// Observe one failed event-handler invocation.
+    fn report(&self, failure: EventHandlerFailure) -> impl core::future::Future<Output = ()> + Send;
+}
 
 /// Continuation supplied to a function decorator.
 ///
