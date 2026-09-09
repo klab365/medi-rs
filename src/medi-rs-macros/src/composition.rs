@@ -237,6 +237,10 @@ pub fn mediator_composition_marker_inner(input: proc_macro::TokenStream) -> proc
             pub const EVENT_WORKERS: usize = #workers;
             /// Number of manifests included in this composition.
             pub const MODULE_COUNT: usize = <[()]>::len(&[#count]);
+            /// Return whether this mediator has started its generated workers and tasks.
+            ///
+            /// Command-only mediators have no `start` method and always return `false`.
+            pub fn is_started(&self) -> bool { self.lifecycle.is_started() }
             /// Send a command through its macro-generated static route.
             pub async fn send<C>(&self, command: C) -> core::result::Result<C::Response, C::Error> where C: ::medi_rs::StaticSendCommand<Self> { command.send(self).await }
             #publish_method

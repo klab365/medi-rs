@@ -43,7 +43,7 @@ mod zero_workers {
     #[should_panic(expected = "event_workers must be greater than zero")]
     fn start_rejects_zero_workers() {
         let mediator = Box::leak(Box::new(Mediator::new()));
-        mediator.start();
+        mediator.start().expect("mediator must start");
     }
 }
 
@@ -122,7 +122,7 @@ mod handler_errors {
     async fn failures_do_not_prevent_later_handlers() {
         let completion = Completion(Arc::new(Notify::new()));
         let mediator = Box::leak(Box::new(Mediator::new(completion.clone())));
-        mediator.start();
+        mediator.start().expect("mediator must start");
 
         let completed = completion.0.notified();
         mediator.publish(Event).await.unwrap();
@@ -171,7 +171,7 @@ mod multiple_workers {
 
         let counter = Counter(Arc::new(AtomicUsize::new(0)));
         let mediator = Box::leak(Box::new(Mediator::new(counter.clone())));
-        mediator.start();
+        mediator.start().expect("mediator must start");
 
         for _ in 0..EVENT_COUNT {
             mediator.publish(Event).await.unwrap();

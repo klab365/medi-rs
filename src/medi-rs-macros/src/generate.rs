@@ -211,9 +211,13 @@ fn generate_event_start(
 ) -> proc_macro2::TokenStream {
     if cfg!(feature = "embassy") {
         quote! {
-            /// Start the generated Embassy event worker.
-            pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) where #resource_tuple: Sync {
+            /// Start generated Embassy event workers and registered runtime tasks.
+            ///
+            /// Returns [`::medi_rs::StartError::AlreadyStarted`] without
+            /// spawning work when this mediator was already started.
+            pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
+                self.lifecycle.start()?;
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
                     self.lifecycle.begin();
@@ -224,19 +228,25 @@ fn generate_event_start(
                     }
                 }
                 #(#task_spawns)*
+                Ok(())
             }
         }
     } else {
         quote! {
-            /// Start the generated event worker and registered runtime tasks.
-            pub fn start(&'static self) where #resource_tuple: Sync {
+            /// Start generated event workers and registered runtime tasks.
+            ///
+            /// Returns [`::medi_rs::StartError::AlreadyStarted`] without
+            /// spawning work when this mediator was already started.
+            pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
+                self.lifecycle.start()?;
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
                     self.lifecycle.begin();
                     ::medi_rs::adapters::selected::spawn(#worker(self));
                 }
                 #(#task_spawns)*
+                Ok(())
             }
         }
     }
@@ -366,7 +376,14 @@ pub(crate) fn generate_task_only_start(
     if cfg!(feature = "embassy") {
         quote! { impl #name {
             /// Start the registered Embassy tasks.
-            pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) where #resource_tuple: Sync { #(#task_spawns)* }
+            ///
+            /// Returns [`::medi_rs::StartError::AlreadyStarted`] without
+            /// spawning work when this mediator was already started.
+            pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
+                self.lifecycle.start()?;
+                #(#task_spawns)*
+                Ok(())
+            }
             /// Signal registered runtime tasks and wait for them to return.
             pub async fn shutdown(&self) -> ::medi_rs::Result<()> {
                 if self.lifecycle.request_shutdown() {
@@ -379,7 +396,14 @@ pub(crate) fn generate_task_only_start(
     } else {
         quote! { impl #name {
             /// Start the registered runtime tasks.
-            pub fn start(&'static self) where #resource_tuple: Sync { #(#task_spawns)* }
+            ///
+            /// Returns [`::medi_rs::StartError::AlreadyStarted`] without
+            /// spawning work when this mediator was already started.
+            pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
+                self.lifecycle.start()?;
+                #(#task_spawns)*
+                Ok(())
+            }
             /// Signal registered runtime tasks and wait for them to return.
             pub async fn shutdown(&self) -> ::medi_rs::Result<()> {
                 if self.lifecycle.request_shutdown() {

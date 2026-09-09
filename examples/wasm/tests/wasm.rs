@@ -31,3 +31,8 @@ async fn generated_mediator_publish_returns_ok() {
         .await
         .unwrap();
 }
+
+#[wasm_bindgen_test]
+fn generated_mediator_rejects_a_second_start() {
+    assert!(medi_rs_wasm_example::duplicate_start_is_rejected());
+}

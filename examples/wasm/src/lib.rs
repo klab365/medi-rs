@@ -1,5 +1,5 @@
 use gloo_timers::future::TimeoutFuture;
-use medi_rs::{MediCommand, Result, medi_handler, medi_module, medi_task, mediator};
+use medi_rs::{MediCommand, Result, StartError, medi_handler, medi_module, medi_task, mediator};
 use std::{cell::RefCell, thread_local};
 use wasm_bindgen::prelude::*;
 
@@ -88,6 +88,15 @@ pub async fn greet(name: String) -> core::result::Result<String, JsValue> {
     mediator().send(Greet { name }).await.map_err(to_js_error)
 }
 
+/// Verify that a generated mediator cannot be started twice.
+///
+/// This is exported for the WASM integration test.
+#[doc(hidden)]
+#[wasm_bindgen]
+pub fn duplicate_start_is_rejected() -> bool {
+    matches!(mediator().start(), Err(StartError::AlreadyStarted))
+}
+
 /// Publish an event through the generated WASM mediator.
 #[wasm_bindgen]
 pub async fn publish_user_registered(email: String) -> core::result::Result<(), JsValue> {
@@ -113,7 +122,7 @@ fn mediator() -> &'static WasmMediator {
         }
 
         let mediator = Box::leak(Box::new(WasmMediator::new()));
-        mediator.start();
+        mediator.start().expect("mediator must start");
         *cell.borrow_mut() = Some(mediator);
         mediator
     })

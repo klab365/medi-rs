@@ -148,7 +148,7 @@ async fn main(spawner: Spawner) {
         &OBSERVED_COUNT,
     ));
     let mediator = MEDIATOR.init(AppMediator::new(board, button));
-    mediator.start(spawner);
+    mediator.start(spawner).expect("mediator must start");
 
     info!("medi-rs Embassy micro:bit v2 example started");
     core::future::pending::<()>().await;

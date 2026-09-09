@@ -37,7 +37,7 @@ mediator! {
 async fn shutdown_drains_events_and_rejects_new_publishes() {
     let count = Count(Arc::new(AtomicUsize::new(0)));
     let mediator = Box::leak(Box::new(ShutdownMediator::new(count.clone())));
-    mediator.start();
+    mediator.start().expect("mediator must start");
 
     for _ in 0..8 {
         mediator.publish(Event).await.unwrap();
@@ -58,6 +58,6 @@ async fn shutdown_drains_events_and_rejects_new_publishes() {
 #[tokio::test]
 async fn shutdown_without_events_completes() {
     let mediator = Box::leak(Box::new(ShutdownMediator::new(Count(Arc::new(AtomicUsize::new(0))))));
-    mediator.start();
+    mediator.start().expect("mediator must start");
     mediator.shutdown().await.unwrap();
 }

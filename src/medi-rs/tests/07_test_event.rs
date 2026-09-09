@@ -1,6 +1,6 @@
 #![cfg(feature = "tokio")]
 
-use medi_rs::{Result, medi_handler, medi_module, mediator};
+use medi_rs::{Result, StartError, medi_handler, medi_module, mediator};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -41,7 +41,8 @@ mediator! {
 async fn publish_should_process_published_event() {
     let queue = InMemoryMsgQueue::default();
     let mediator = Box::leak(Box::new(EventMediator::new(queue.clone())));
-    mediator.start();
+    mediator.start().expect("mediator must start");
+    assert_eq!(mediator.start(), Err(StartError::AlreadyStarted));
     mediator.publish(BaseEvent).await.unwrap();
     mediator.publish(BaseEvent).await.unwrap();
     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;

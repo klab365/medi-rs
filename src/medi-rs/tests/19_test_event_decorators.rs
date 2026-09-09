@@ -54,7 +54,7 @@ mediator! {
 async fn decorators_wrap_event_handlers() {
     CALLS.lock().unwrap().clear();
     let mediator = Box::leak(Box::new(EventDecoratorMediator::new()));
-    mediator.start();
+    mediator.start().expect("mediator must start");
 
     let completed = COMPLETION.notified();
     mediator.publish(Event).await.unwrap();

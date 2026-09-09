@@ -103,7 +103,7 @@ async fn composition_generates_static_event_routes() {
         UserRepository("users"),
         AuditRepository("audit"),
     )));
-    mediator.start();
+    mediator.start().expect("mediator must start");
 
     mediator.publish(UserCreated).await.unwrap();
     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;

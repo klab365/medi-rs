@@ -6,6 +6,10 @@ All notable changes to `medi-rs` are documented here.
 
 ### Added
 
+- Generated mediators now expose `is_started()` and make `start()` idempotency
+  explicit: the first call starts event workers and `#[medi_task]` tasks, while
+  later calls return `StartError::AlreadyStarted` without spawning duplicate
+  work on Tokio, Wasm, or Embassy.
 - Generated event mediators now provide non-blocking `try_publish(event)`.
   It returns `TryPublishError::Full(event)` when the bounded queue has no
   capacity and `TryPublishError::Closed(event)` after shutdown, retaining the

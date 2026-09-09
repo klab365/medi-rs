@@ -279,7 +279,7 @@ medi_module! {
 
 ## Events
 
-Events are plain `Clone + Send + 'static` values. List each event route in a module manifest, create a `'static` mediator, and call `start` before publishing. Each generated worker dispatches an event to every registered handler. `publish` waits when the configured bounded queue is full. Use `try_publish` when the caller must not wait: it returns `TryPublishError::Full(event)` when capacity is exhausted and `TryPublishError::Closed(event)` after shutdown or when workers are unavailable. Both errors retain the event for retry, persistence, or disposal. Event handler errors are currently ignored after dispatch.
+Events are plain `Clone + Send + 'static` values. List each event route in a module manifest, create a `'static` mediator, and call `start` before publishing. `start` starts workers and `#[medi_task]` tasks exactly once; later calls return `StartError::AlreadyStarted` and do not spawn additional work. Use `is_started` to inspect that state. Command-only mediators have no startup work, so `is_started` remains `false`. Each generated worker dispatches an event to every registered handler. `publish` waits when the configured bounded queue is full. Use `try_publish` when the caller must not wait: it returns `TryPublishError::Full(event)` when capacity is exhausted and `TryPublishError::Closed(event)` after shutdown or when workers are unavailable. Both errors retain the event for retry, persistence, or disposal. Event handler errors are currently ignored after dispatch.
 
 ```rust,no_run
 use medi_rs::{Result, medi_handler, medi_module, mediator};
@@ -297,7 +297,7 @@ mediator! { struct AppMediator { event_queue_capacity: 16; event_workers: 1; mod
 
 async fn run() -> Result<()> {
     let mediator = Box::leak(Box::new(AppMediator::new()));
-    mediator.start();
+    mediator.start().expect("mediator must start");
     mediator.publish(UserRegistered).await?;
     Ok(())
 }

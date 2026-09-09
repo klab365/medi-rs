@@ -1,4 +1,14 @@
-//! Errors returned by typed event queue operations.
+//! Errors returned by mediator lifecycle and typed event queue operations.
+
+/// Error returned when a mediator is started more than once.
+///
+/// A mediator starts its generated event workers and `#[medi_task]` tasks at
+/// most once. Check `is_started` before calling `start` when needed.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum StartError {
+    /// The mediator has already started its generated workers and tasks.
+    AlreadyStarted,
+}
 
 /// Error returned by a non-blocking event publish attempt.
 ///
