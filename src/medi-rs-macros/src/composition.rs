@@ -1,8 +1,9 @@
 //! Mediator-composition parsing, validation, and code generation.
 
 use crate::generate::{
-    collect_event_routes, collect_resource_types, collect_tasks, generate_command_routes, generate_constructor,
-    generate_event_support, generate_task_only_start, generate_task_spawns, generate_task_workers,
+    EventDispatchConfig, collect_event_routes, collect_resource_types, collect_tasks, generate_command_routes,
+    generate_constructor, generate_event_support, generate_task_only_start, generate_task_spawns,
+    generate_task_workers,
 };
 use crate::manifest::ModuleManifest;
 use quote::{format_ident, quote};
@@ -29,6 +30,7 @@ struct CompositionMarkerInput {
     event_workers: Expr,
     modules: Vec<ModuleManifest>,
     decorators: Vec<Path>,
+    event_failure_reporter: Option<Type>,
     count: proc_macro2::TokenStream,
 }
 
@@ -90,6 +92,19 @@ impl Parse for CompositionMarkerInput {
         }
         input.parse::<Token![;]>()?;
 
+        let reporter_key: Ident = input.parse()?;
+        if reporter_key != "event_failure_reporter" {
+            return Err(syn::Error::new(
+                reporter_key.span(),
+                "expected `event_failure_reporter`",
+            ));
+        }
+        input.parse::<Token![:]>()?;
+        let reporter_body;
+        bracketed!(reporter_body in input);
+        let event_failure_reporter = (!reporter_body.is_empty()).then(|| reporter_body.parse()).transpose()?;
+        input.parse::<Token![;]>()?;
+
         let count_key: Ident = input.parse()?;
         if count_key != "count" {
             return Err(syn::Error::new(count_key.span(), "expected `count`"));
@@ -107,6 +122,7 @@ impl Parse for CompositionMarkerInput {
             event_workers,
             modules: parsed_modules,
             decorators,
+            event_failure_reporter,
             count,
         })
     }
@@ -149,7 +165,7 @@ fn validate_unique_registrations(modules: &[ModuleManifest]) -> SynResult<()> {
 }
 
 /// Temporary composition endpoint. It validates the full registration graph and emits static dispatch code.
-pub fn mediator_composition_marker_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as CompositionMarkerInput);
     if let Err(error) = validate_unique_registrations(&input.modules) {
         return error.into_compile_error().into();
@@ -182,6 +198,7 @@ pub fn mediator_composition_marker_inner(input: proc_macro::TokenStream) -> proc
         has_events,
         &input.event_queue_capacity,
         tasks.len(),
+        input.event_failure_reporter.as_ref(),
     );
     let job_name = format_ident!("{}EventJob", input.name);
     let event_support = has_events.then(|| {
@@ -191,10 +208,17 @@ pub fn mediator_composition_marker_inner(input: proc_macro::TokenStream) -> proc
             &job_name,
             &input.event_queue_capacity,
             &resource_tuple,
-            &input.decorators,
+            EventDispatchConfig {
+                decorators: &input.decorators,
+                event_failure_reporter: input.event_failure_reporter.as_ref(),
+            },
             &task_spawns,
         )
     });
+    let reporter_field = input
+        .event_failure_reporter
+        .as_ref()
+        .map(|reporter| quote! { event_failure_reporter: #reporter, });
     let event_job = event_support
         .as_ref()
         .map_or_else(|| quote! {}, |support| support.job.clone());
@@ -228,7 +252,7 @@ pub fn mediator_composition_marker_inner(input: proc_macro::TokenStream) -> proc
     let count = input.count;
     quote! {
         #event_job
-        #vis struct #name { resources: #resource_tuple, #event_field #(#task_shutdown_fields)* lifecycle: ::medi_rs::Lifecycle }
+        #vis struct #name { resources: #resource_tuple, #event_field #reporter_field #(#task_shutdown_fields)* lifecycle: ::medi_rs::Lifecycle }
         impl #name {
             #constructor
             /// Configured capacity for the generated event queue.

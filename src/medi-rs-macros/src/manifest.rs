@@ -187,6 +187,7 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                 event_workers: $workers:expr;
                 modules: [$($modules:tt)*];
                 decorators: [$($decorators:path),*];
+                event_failure_reporter: [$($reporter:ty)?];
                 count: [$($count:tt)*];
                 remaining: [$($remaining:ident),*];
             }) => {
@@ -201,6 +202,7 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                         #tasks_section
                     },];
                     decorators: [$($decorators),*];
+                    event_failure_reporter: [$($reporter)?];
                     count: [$($count)* (),];
                     remaining: [$($remaining),*];
                 }

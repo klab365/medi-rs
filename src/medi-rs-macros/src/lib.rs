@@ -11,7 +11,7 @@ mod manifest;
 mod task;
 
 use command::derive_medi_command_inner;
-use composition::mediator_composition_marker_inner;
+use composition::finalize_composition_inner;
 use handler::medi_handler_inner;
 use manifest::medi_module_inner;
 use task::medi_task_inner;
@@ -53,9 +53,9 @@ pub fn medi_task(attribute: proc_macro::TokenStream, input: proc_macro::TokenStr
     medi_task_inner(attribute, input)
 }
 
-/// Internal endpoint for the `mediator!` manifest collector.
+/// Internal endpoint that validates a collected manifest graph and generates a mediator.
 #[doc(hidden)]
 #[proc_macro]
-pub fn mediator_composition_marker(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    mediator_composition_marker_inner(input)
+pub fn __medi_rs_finalize_composition(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    finalize_composition_inner(input)
 }

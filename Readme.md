@@ -179,7 +179,20 @@ mediator! {
 
 The generated type has `new`, `send`, and, when an event route exists, `publish`, `try_publish`, `start`, and `shutdown`. It uses the runtime selected by the enabled `tokio`, `wasm`, or `embassy` feature. The event configuration rules are described in [Event configuration](#event-configuration). `start` requires `'static` mediator storage (`start(spawner)` for Embassy).
 
-`mediator_composition_marker!` is also exported for internal macro expansion. It is not an application-facing API; use `mediator!` instead.
+To observe asynchronous handler failures, configure a unit-struct `EventFailureReporter` type. The reporter runs once per failed handler and does not prevent subsequent handlers from running. Because event routes may have unrelated error types, `EventHandlerFailure` intentionally provides event and handler names, not the concrete error value.
+
+```rust,ignore
+mediator! {
+    struct AppMediator {
+        event_queue_capacity: 16;
+        event_workers: 1;
+        modules: [users];
+        event_failure_reporter: LogEventFailure;
+    }
+}
+```
+
+`__medi_rs_finalize_composition!` is exported only for internal macro expansion. It is not an application-facing API; use `mediator!` instead.
 
 ## Resources
 
@@ -279,7 +292,7 @@ medi_module! {
 
 ## Events
 
-Events are plain `Clone + Send + 'static` values. List each event route in a module manifest, create a `'static` mediator, and call `start` before publishing. `start` starts workers and `#[medi_task]` tasks exactly once; later calls return `StartError::AlreadyStarted` and do not spawn additional work. Use `is_started` to inspect that state. Command-only mediators have no startup work, so `is_started` remains `false`. Each generated worker dispatches an event to every registered handler. `publish` waits when the configured bounded queue is full. Use `try_publish` when the caller must not wait: it returns `TryPublishError::Full(event)` when capacity is exhausted and `TryPublishError::Closed(event)` after shutdown or when workers are unavailable. Both errors retain the event for retry, persistence, or disposal. Event handler errors are currently ignored after dispatch.
+Events are plain `Clone + Send + 'static` values. List each event route in a module manifest, create a `'static` mediator, and call `start` before publishing. `start` starts workers and `#[medi_task]` tasks exactly once; later calls return `StartError::AlreadyStarted` and do not spawn additional work. Use `is_started` to inspect that state. Command-only mediators have no startup work, so `is_started` remains `false`. Each generated worker dispatches an event to every registered handler. `publish` waits when the configured bounded queue is full. Use `try_publish` when the caller must not wait: it returns `TryPublishError::Full(event)` when capacity is exhausted and `TryPublishError::Closed(event)` after shutdown or when workers are unavailable. Both errors retain the event for retry, persistence, or disposal. Handler failures never make `publish` fail and never stop the other handlers. Without `event_failure_reporter`, they are discarded for backwards compatibility. With a reporter, each failure is observed once through `EventHandlerFailure` metadata; concrete handler errors are not exposed because routes need not share an error type.
 
 ```rust,no_run
 use medi_rs::{Result, medi_handler, medi_module, mediator};

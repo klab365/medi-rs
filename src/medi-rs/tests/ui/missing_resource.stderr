@@ -33,7 +33,7 @@ note: required by a bound in `__medi_handler_create_user`
    |
 11 | #[medi_handler]
    | ^^^^^^^^^^^^^^^ required by this bound in `__medi_handler_create_user`
-   = note: this error originates in the macro `$crate::mediator_composition_marker` which comes from the expansion of the attribute macro `medi_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
+   = note: this error originates in the macro `$crate::__medi_rs_finalize_composition` which comes from the expansion of the attribute macro `medi_handler` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `(): medi_rs::tlist::Get<UserRepository, _>` is not satisfied
   --> tests/ui/missing_resource.rs:21:34

@@ -78,8 +78,17 @@ the event and returns after it is accepted by the selected adapter queue.
 Call `start` on a `'static` mediator to launch `EVENT_WORKERS` generated
 workers. A worker receives a job and invokes every registered handler for that
 event. Event values must be `Clone + Send + 'static`, because each handler
-receives its own clone. Handler failures are currently discarded so that one
-failing event handler does not stop dispatch to the remaining handlers.
+receives its own clone. A failing handler never stops dispatch to the remaining
+handlers and does not make the earlier `publish` call fail: `publish` only
+confirms queue acceptance. By default failures are discarded for compatibility.
+
+Applications can add `event_failure_reporter: ReporterType;` to `mediator!`.
+The generated worker awaits its `EventFailureReporter::report` method exactly
+once after every failed handler. Reporting also cannot stop later handlers.
+`EventHandlerFailure` contains the manifest-written event and handler names;
+it deliberately does not contain the concrete error because independent routes
+may use unrelated error types. This supports logging, metrics, and alerting but
+is not a retry, dead-letter, or error-unification mechanism.
 
 ## Runtime adapters
 
