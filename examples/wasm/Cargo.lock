@@ -154,7 +154,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "medi-rs"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "futures",
  "medi-rs-macros",
@@ -163,7 +163,7 @@ dependencies = [
 
 [[package]]
 name = "medi-rs-macros"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "proc-macro2",
  "quote",

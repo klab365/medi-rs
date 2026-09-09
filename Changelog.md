@@ -2,6 +2,21 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## 3.0.0
+
+### Breaking changes
+
+- Merged `StaticCommand` into `Command`. Command implementations now declare
+  both `Command::Response` and `Command::Error`; `StaticCommand` is removed.
+- Removed the unused `StaticHandler`, `Dependency`, and `impl_static_handler!`
+  extension API. Generated `#[medi_handler]` invokers remain the supported
+  typed resource-injection mechanism.
+
+### Changed
+
+- `StaticSendCommand` now inherits the response and error types from `Command`
+  instead of declaring duplicate associated types.
+
 ## 2.2.0
 
 ### Added

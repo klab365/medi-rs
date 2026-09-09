@@ -175,8 +175,6 @@ pub(crate) fn generate_command_routes(
         };
         quote! {
             impl ::medi_rs::StaticSendCommand<#name> for #request {
-                type Response = <#request as ::medi_rs::Command>::Response;
-                type Error = <#request as ::medi_rs::StaticCommand>::Error;
                 fn send(self, mediator: &#name) -> impl core::future::Future<Output = core::result::Result<Self::Response, Self::Error>> + Send {
                     async move { #invocation }
                 }

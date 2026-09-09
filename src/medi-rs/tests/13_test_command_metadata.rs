@@ -1,6 +1,6 @@
 use core::convert::Infallible;
 
-use medi_rs::{StaticCommand, medi_handler};
+use medi_rs::{Command, medi_handler};
 use medi_rs_macros::MediCommand;
 
 #[derive(MediCommand)]
@@ -28,16 +28,16 @@ async fn handler_with_mediator(_: &TestMediator, _: InfallibleCommand) -> Result
     Ok(2)
 }
 
-fn assert_infallible<C: StaticCommand<Error = Infallible>>() {}
-fn assert_domain_error<C: StaticCommand<Error = DomainError>>() {}
+fn assert_infallible<C: Command<Response = u32, Error = Infallible>>() {}
+fn assert_domain_error<C: Command<Response = u32, Error = DomainError>>() {}
 
 #[test]
-fn derive_defaults_static_command_error_to_infallible() {
+fn derive_defaults_command_error_to_infallible() {
     assert_infallible::<InfallibleCommand>();
 }
 
 #[test]
-fn derive_uses_the_declared_static_command_error() {
+fn derive_uses_the_declared_command_error() {
     assert_domain_error::<FallibleCommand>();
 }
 

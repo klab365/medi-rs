@@ -44,10 +44,10 @@ macro.
 
 ## Commands and handlers
 
-`#[derive(MediCommand)]` implements `Command` and `StaticCommand` for the
-request type. `Command::Response` is selected with
-`#[medi_command(return_type = Type)]`; `StaticCommand::Error` is selected with
-`error_type = Type`. The defaults are `()` and `Infallible`.
+`#[derive(MediCommand)]` implements `Command` for the request type.
+`Command::Response` is selected with `#[medi_command(return_type = Type)]`;
+`Command::Error` is selected with `error_type = Type`. The defaults are `()`
+and `Infallible`.
 
 `#[medi_handler]` keeps the original async function and emits a typed invoker.
 The final argument is the command or event. Earlier value arguments are cloned

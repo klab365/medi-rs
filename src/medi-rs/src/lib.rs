@@ -157,7 +157,6 @@ pub mod adapters;
 mod bus;
 mod error;
 mod event;
-mod handler;
 mod resource;
 /// Internal typed-tuple primitives used by generated mediator code.
 #[doc(hidden)]
@@ -168,7 +167,6 @@ pub use adapters::lifecycle::Lifecycle;
 pub use adapters::queue::EventQueue;
 pub use adapters::shutdown::ShutdownSignal;
 pub use error::*;
-pub use handler::*;
 
 pub use medi_rs_macros::{__medi_rs_finalize_composition, MediCommand, medi_handler, medi_module, medi_task};
 
@@ -260,14 +258,11 @@ where
 {
     /// Response type returned by the command handler.
     type Response: Send + Sync + 'static;
-}
 
-/// Static-dispatch metadata for a command.
-///
-/// [`MediCommand`] derives this trait automatically. When its `error_type`
-/// attribute is omitted, [`core::convert::Infallible`] is used.
-pub trait StaticCommand: Command {
-    /// Concrete application error returned by this command's handler.
+    /// Concrete application error returned by the command handler.
+    ///
+    /// [`MediCommand`] uses [`core::convert::Infallible`] when its `error_type`
+    /// attribute is omitted.
     type Error: Send;
 }
 
@@ -276,13 +271,7 @@ pub trait StaticCommand: Command {
 /// This is implemented by `mediator!`; applications call the generated
 /// mediator's inherent `send` method instead of implementing it directly.
 #[doc(hidden)]
-pub trait StaticSendCommand<M>: Sized {
-    /// Value returned by the command handler.
-    type Response;
-
-    /// Concrete error returned by the command handler.
-    type Error;
-
+pub trait StaticSendCommand<M>: Command + Sized {
     /// Invoke this command's generated route.
     fn send(
         self,
@@ -303,14 +292,3 @@ pub trait StaticTryPublish<M>: Sized {
     /// Attempt to enqueue this event without waiting for queue capacity.
     fn try_publish(self, mediator: &M) -> core::result::Result<(), TryPublishError<Self>>;
 }
-
-//-- region: Implement static handler traits
-crate::impl_static_handler!();
-crate::impl_static_handler!(T1: I1);
-crate::impl_static_handler!(T1: I1, T2: I2);
-crate::impl_static_handler!(T1: I1, T2: I2, T3: I3);
-crate::impl_static_handler!(T1: I1, T2: I2, T3: I3, T4: I4);
-crate::impl_static_handler!(T1: I1, T2: I2, T3: I3, T4: I4, T5: I5);
-crate::impl_static_handler!(T1: I1, T2: I2, T3: I3, T4: I4, T5: I5, T6: I6);
-crate::impl_static_handler!(T1: I1, T2: I2, T3: I3, T4: I4, T5: I5, T6: I6, T7: I7);
-//-- endregion: Implement the handler traits

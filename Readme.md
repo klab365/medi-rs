@@ -86,7 +86,7 @@ The registration graph is fixed where `mediator!` is expanded:
 
 ### `#[derive(MediCommand)]` and `#[medi_command(...)]`
 
-Derive `MediCommand` on a command or query type. It implements `Command`, which supplies the response type, and `StaticCommand`, which supplies the handler error type:
+Derive `MediCommand` on a command or query type. It implements `Command`, which supplies the response and handler error types:
 
 ```rust
 #[derive(medi_rs::MediCommand)]
