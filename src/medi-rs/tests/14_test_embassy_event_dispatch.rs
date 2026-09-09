@@ -10,7 +10,7 @@ use std::{
 };
 
 use futures::{pin_mut, poll};
-use medi_rs::{medi_handler, medi_module, medi_task, mediator};
+use medi_rs::{StartError, medi_handler, medi_module, medi_task, mediator};
 
 #[derive(Clone)]
 struct EventObserved(u32);
@@ -69,7 +69,10 @@ fn embassy_worker_dispatches_published_events() {
         let mediator_for_test: &'static EmbassyTestMediator = mediator;
 
         executor.run(|spawner| {
-            mediator.start(spawner);
+            assert!(!mediator.is_started());
+            mediator.start(spawner).expect("mediator must start");
+            assert!(mediator.is_started());
+            assert_eq!(mediator.start(spawner), Err(StartError::AlreadyStarted));
             started_tx.send(mediator_for_test).expect("test must receive mediator");
         });
     });

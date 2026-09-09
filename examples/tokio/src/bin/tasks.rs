@@ -31,7 +31,7 @@ mediator! {
 async fn main() {
     let ticks = TickCount(Arc::new(AtomicU32::new(0)));
     let mediator = Box::leak(Box::new(TaskMediator::new(ticks.clone())));
-    mediator.start();
+    mediator.start().expect("mediator must start");
 
     sleep(Duration::from_millis(50)).await;
     println!("task completed {} ticks", ticks.0.load(Ordering::Relaxed));

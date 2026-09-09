@@ -50,7 +50,7 @@ mod event_routing {
         assert!(CALLS.lock().unwrap().is_empty());
 
         let completed = COMPLETION.notified();
-        mediator.start();
+        mediator.start().expect("mediator must start");
         tokio::time::timeout(std::time::Duration::from_secs(1), completed)
             .await
             .expect("recursive event should be dispatched");

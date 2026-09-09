@@ -2,6 +2,8 @@
 
 use core::future::{Future, poll_fn};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+use crate::StartError;
 use core::task::Poll;
 use futures::task::AtomicWaker;
 
@@ -11,6 +13,7 @@ use futures::task::AtomicWaker;
 /// spawned, and marks it complete when its future returns. [`Self::wait`] is
 /// therefore the completion guarantee used by mediator shutdown.
 pub struct Lifecycle {
+    started: AtomicBool,
     running: AtomicUsize,
     shutdown_requested: AtomicBool,
     waker: AtomicWaker,
@@ -20,10 +23,27 @@ impl Lifecycle {
     /// Create an idle lifecycle tracker.
     pub const fn new() -> Self {
         Self {
+            started: AtomicBool::new(false),
             running: AtomicUsize::new(0),
             shutdown_requested: AtomicBool::new(false),
             waker: AtomicWaker::new(),
         }
+    }
+
+    /// Mark the mediator as started.
+    ///
+    /// Returns [`StartError::AlreadyStarted`] if another caller has already
+    /// started it. This operation is atomic across concurrent callers.
+    pub fn start(&self) -> core::result::Result<(), StartError> {
+        self.started
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| ())
+            .map_err(|_| StartError::AlreadyStarted)
+    }
+
+    /// Return whether the mediator has been started.
+    pub fn is_started(&self) -> bool {
+        self.started.load(Ordering::Acquire)
     }
 
     /// Request shutdown, returning `true` only for the caller that initiated it.

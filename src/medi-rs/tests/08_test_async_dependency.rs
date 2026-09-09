@@ -50,7 +50,7 @@ mediator! {
 async fn send_should_work_with_async_dependency_and_event() {
     let state = State(Arc::new(Mutex::new(Vec::new())));
     let mediator = Box::leak(Box::new(AsyncMediator::new(state.clone())));
-    mediator.start();
+    mediator.start().expect("mediator must start");
     mediator.send(CreateUser { name: "John".into() }).await.unwrap();
     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
     let names: Vec<_> = state.0.lock().unwrap().iter().map(|user| user.name.clone()).collect();
