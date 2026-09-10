@@ -2,7 +2,7 @@
 
 All notable changes to `medi-rs` are documented here.
 
-## 3.0.0
+## 2.3.0
 
 ### Breaking changes
 
