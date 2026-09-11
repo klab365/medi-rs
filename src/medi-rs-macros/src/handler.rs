@@ -84,9 +84,25 @@ pub fn medi_handler_inner(
         Some(Type::Reference(reference)) => (Some(reference.elem.as_ref()), arguments[1..].to_vec()),
         _ => (None, arguments),
     };
+    if let Some(reference) = resources.iter().find_map(|resource| match resource {
+        Type::Reference(reference) if reference.mutability.is_some() => Some(reference),
+        _ => None,
+    }) {
+        return syn::Error::new_spanned(
+            reference,
+            "mutable resource references are not supported; use a synchronization primitive or an owner task",
+        )
+        .into_compile_error()
+        .into();
+    }
+
     let indexes: Vec<Ident> = (0..resources.len()).map(|index| format_ident!("I{index}")).collect();
-    let call_arguments = resources.iter().zip(&indexes).map(|(resource, index)| {
-        quote! { ::medi_rs::tlist::get::<#resource, #index, R>(resources) }
+    let call_arguments = resources.iter().zip(&indexes).map(|(resource, index)| match resource {
+        Type::Reference(reference) => {
+            let resource = &reference.elem;
+            quote! { ::medi_rs::tlist::get_ref::<#resource, #index, R>(resources) }
+        }
+        _ => quote! { ::medi_rs::tlist::get::<#resource, #index, R>(resources) },
     });
 
     let handler_call = if context.is_some() {
@@ -104,8 +120,12 @@ pub fn medi_handler_inner(
     } else {
         quote! { <M, R, #(#indexes,)*> }
     };
-    let resource_bounds = resources.iter().zip(&indexes).map(|(resource, index)| {
-        quote! { R: ::medi_rs::tlist::Get<#resource, #index>, }
+    let resource_bounds = resources.iter().zip(&indexes).map(|(resource, index)| match resource {
+        Type::Reference(reference) => {
+            let resource = &reference.elem;
+            quote! { R: ::medi_rs::tlist::GetRef<#resource, #index>, }
+        }
+        _ => quote! { R: ::medi_rs::tlist::Get<#resource, #index>, },
     });
     // Decorator continuations must be `Send`; when they capture `resources`,
     // the referenced resource tuple must therefore be `Sync`.

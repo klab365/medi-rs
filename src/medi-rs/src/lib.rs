@@ -48,10 +48,12 @@
 //!
 //! # Resources and events
 //!
-//! Resources are ordinary `Clone` values listed in a module's `resources`
-//! section. They are passed to the generated `new` constructor and injected as
-//! handler parameters before the message. Events are ordinary `Clone + Send +
-//! 'static` values listed in an `events` section. To process events, retain the
+//! Resources are values listed in a module's `resources` section. They are
+//! passed to the generated `new` constructor and injected as handler parameters
+//! before the message: a `Resource` parameter receives a clone, while a
+//! `&Resource` parameter borrows the mediator-owned value without requiring
+//! `Clone`. Events are ordinary `Clone + Send + 'static` values listed in an
+//! `events` section. To process events, retain the
 //! mediator in `'static` storage and call its generated `start` method before
 //! calling `publish`.
 //!
