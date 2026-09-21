@@ -2,6 +2,15 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## Unreleased
+
+### Added
+
+- Handler resources can be borrowed as `&Resource` without requiring `Clone`.
+  Shared borrowed resources remain subject to Rust's normal `Sync` requirements
+  when handlers run concurrently; mutable resource references are rejected in
+  favor of synchronization primitives or an owner task.
+
 ## 2.3.0
 
 ### Breaking changes

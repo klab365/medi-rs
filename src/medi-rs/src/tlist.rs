@@ -56,6 +56,44 @@ where
     resources.get()
 }
 
+/// Extract a shared reference to a typed resource from a nested tuple list.
+///
+/// Unlike [`Get`], this does not require the resource to implement [`Clone`].
+/// Macro-generated mediator code uses this when a handler declares a resource
+/// parameter as `&T`.
+#[doc(hidden)]
+pub trait GetRef<T, I> {
+    /// Borrow the resource at this type-level position.
+    fn get_ref(&self) -> &T;
+}
+
+impl<T, Tail> GetRef<T, Here> for (T, Tail) {
+    fn get_ref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T, Head, Tail, I> GetRef<T, There<I>> for (Head, Tail)
+where
+    Tail: GetRef<T, I>,
+{
+    fn get_ref(&self) -> &T {
+        self.1.get_ref()
+    }
+}
+
+/// Borrow a typed resource from a nested tuple list.
+///
+/// The type-level tuple position is inferred by the compiler. If `T` is not
+/// registered in `R`, this produces a compile-time error.
+#[doc(hidden)]
+pub fn get_ref<T, I, R>(resources: &R) -> &T
+where
+    R: GetRef<T, I>,
+{
+    resources.get_ref()
+}
+
 #[cfg(test)]
 mod tests {
     use super::get;
