@@ -70,6 +70,7 @@ macro_rules! impl_event_queue {
 pub mod lifecycle;
 pub mod queue;
 pub mod shutdown;
+pub mod stream;
 
 #[cfg(feature = "embassy")]
 pub mod embassy;
@@ -81,14 +82,20 @@ pub mod wasm;
 #[cfg(all(feature = "tokio", not(feature = "wasm"), not(feature = "embassy")))]
 pub mod selected {
     pub use super::tokio::TokioEventQueue as EventQueue;
+    pub use super::tokio::TokioStreamChannel as StreamChannel;
+    pub use super::tokio::TokioStreamSender as RawStreamSender;
     pub use super::tokio::spawn;
 }
 #[cfg(all(feature = "wasm", not(feature = "tokio"), not(feature = "embassy")))]
 pub mod selected {
     pub use super::wasm::WasmEventQueue as EventQueue;
+    pub use super::wasm::WasmStreamChannel as StreamChannel;
+    pub use super::wasm::WasmStreamSender as RawStreamSender;
     pub use super::wasm::spawn;
 }
 #[cfg(all(feature = "embassy", not(feature = "tokio"), not(feature = "wasm")))]
 pub mod selected {
     pub use super::embassy::EmbassyEventQueue as EventQueue;
+    pub use super::embassy::EmbassyStreamChannel as StreamChannel;
+    pub use super::embassy::EmbassyStreamSender as RawStreamSender;
 }

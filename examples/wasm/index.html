@@ -6,6 +6,7 @@
   <body>
        <script type="module">
          import init, {
+           countdown,
            greet,
            publish_user_registered,
            publish_with_generated_mediator,
@@ -16,6 +17,7 @@
          console.log(await greet("WASM"));
          await publish_user_registered("user@example.com");
          await publish_with_generated_mediator("hello from generated mediator");
+         console.log("countdown finished:", await countdown(5, 500));
        </script>
   </body>
 </html>

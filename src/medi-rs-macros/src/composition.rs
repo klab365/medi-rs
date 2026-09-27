@@ -1,9 +1,9 @@
 //! Mediator-composition parsing, validation, and code generation.
 
 use crate::generate::{
-    EventDispatchConfig, collect_event_routes, collect_resource_types, collect_tasks, generate_command_routes,
-    generate_constructor, generate_event_support, generate_task_only_start, generate_task_spawns,
-    generate_task_workers,
+    ConstructorFields, EventDispatchConfig, collect_event_routes, collect_resource_types, collect_tasks,
+    generate_command_routes, generate_constructor, generate_event_support, generate_stream_support,
+    generate_task_only_start, generate_task_spawns, generate_task_workers,
 };
 use crate::manifest::ModuleManifest;
 use quote::{format_ident, quote};
@@ -139,8 +139,19 @@ fn combine_error(errors: &mut Option<syn::Error>, error: syn::Error) {
 fn validate_unique_registrations(modules: &[ModuleManifest]) -> SynResult<()> {
     let mut registrations = std::collections::HashMap::new();
     let mut resources = std::collections::HashMap::new();
+    let mut streams = std::collections::HashMap::new();
     let mut errors = None;
     for module in modules {
+        for stream in &module.streams {
+            let request = &stream.request;
+            let key = quote!(#request).to_string();
+            if streams.insert(key.clone(), request.span()).is_some() {
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(request.span(), format!("duplicate stream registration for `{key}`")),
+                );
+            }
+        }
         for command in &module.commands {
             let request = &command.request;
             let key = quote!(#request).to_string();
@@ -181,6 +192,16 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
         .into_compile_error()
         .into();
     }
+    let has_streams = input.modules.iter().any(|module| !module.streams.is_empty());
+    if has_streams && !cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy")) {
+        return syn::Error::new(
+            input.name.span(),
+            "stream mediators require the `tokio`, `wasm`, or `embassy` feature",
+        )
+        .into_compile_error()
+        .into();
+    }
+    let stream_support = generate_stream_support(&input.modules, &input.name);
     let resource_types = collect_resource_types(&input.modules);
     let resource_tuple = nested_tuple_type(&resource_types);
     let resource_names: Vec<_> = (0..resource_types.len())
@@ -197,8 +218,11 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
         &resource_values,
         has_events,
         &input.event_queue_capacity,
-        tasks.len(),
-        input.event_failure_reporter.as_ref(),
+        ConstructorFields {
+            task_count: tasks.len(),
+            event_failure_reporter: input.event_failure_reporter.as_ref(),
+            stream_channels: &stream_support.initializers,
+        },
     );
     let job_name = format_ident!("{}EventJob", input.name);
     let event_support = has_events.then(|| {
@@ -250,9 +274,12 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     let capacity = input.event_queue_capacity;
     let workers = input.event_workers;
     let count = input.count;
+    let stream_fields = stream_support.fields;
+    let stream_method = stream_support.method;
+    let stream_routes = stream_support.routes;
     quote! {
         #event_job
-        #vis struct #name { resources: #resource_tuple, #event_field #reporter_field #(#task_shutdown_fields)* lifecycle: ::medi_rs::Lifecycle }
+        #vis struct #name { resources: #resource_tuple, #event_field #reporter_field #(#task_shutdown_fields)* #stream_fields lifecycle: ::medi_rs::Lifecycle }
         impl #name {
             #constructor
             /// Configured capacity for the generated event queue.
@@ -268,7 +295,8 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
             /// Send a command through its macro-generated static route.
             pub async fn send<C>(&self, command: C) -> core::result::Result<C::Response, C::Error> where C: ::medi_rs::StaticSendCommand<Self> { command.send(self).await }
             #publish_method
+            #stream_method
         }
-        #(#command_routes)* #publish_routes #event_worker #(#task_workers)* #task_only_start
+        #(#command_routes)* #stream_routes #publish_routes #event_worker #(#task_workers)* #task_only_start
     }.into()
 }

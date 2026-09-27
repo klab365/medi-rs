@@ -6,4 +6,8 @@ fn invalid_module_compositions_fail_to_compile() {
     cases.compile_fail("tests/ui/missing_resource.rs");
     cases.compile_fail("tests/ui/handler_without_message.rs");
     cases.compile_fail("tests/ui/invalid_handler_attribute.rs");
+    cases.compile_fail("tests/ui/duplicate_stream.rs");
+    cases.compile_fail("tests/ui/duplicate_stream_in_module.rs");
+    cases.compile_fail("tests/ui/stream_handler_without_sender.rs");
+    cases.compile_fail("tests/ui/stream_request_without_item_type.rs");
 }

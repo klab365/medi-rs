@@ -1,5 +1,9 @@
 use gloo_timers::future::TimeoutFuture;
-use medi_rs::{MediCommand, Result, StartError, medi_handler, medi_module, medi_task, mediator};
+use medi_rs::stream::TryStreamExt;
+use medi_rs::{
+    MediCommand, MediStreamRequest, Result, StartError, StreamSender, medi_handler, medi_module, medi_stream_handler,
+    medi_task, mediator,
+};
 use std::{cell::RefCell, thread_local};
 use wasm_bindgen::prelude::*;
 
@@ -23,6 +27,29 @@ struct UserRegistered {
 #[derive(Clone)]
 struct AuditEvent {
     message: String,
+}
+
+/// Counts down from `from` to `1`, one number every `interval_ms`.
+#[derive(MediStreamRequest)]
+#[medi_stream(item_type = u32, error_type = String, capacity = 4)]
+struct Countdown {
+    from: u32,
+    interval_ms: u32,
+}
+
+#[medi_stream_handler]
+async fn countdown_handler(
+    sender: StreamSender<'_, Countdown>,
+    request: Countdown,
+) -> core::result::Result<(), String> {
+    if request.from > 60 {
+        return Err(format!("countdown from {} is too long", request.from));
+    }
+    for remaining in (1..=request.from).rev() {
+        TimeoutFuture::new(request.interval_ms).await;
+        sender.send(remaining).await;
+    }
+    Ok(())
 }
 
 #[medi_handler]
@@ -56,6 +83,11 @@ medi_module! {
 }
 
 medi_module! {
+    manifest countdown_manifest;
+    streams { Countdown => countdown_handler; }
+}
+
+medi_module! {
     manifest email_manifest;
     events { UserRegistered => [user_registered_handler]; }
 }
@@ -74,7 +106,7 @@ mediator! {
     pub struct WasmMediator {
         event_queue_capacity: 16;
         event_workers: 1;
-        modules: [greeter_manifest, email_manifest, audit_manifest, runtime_task_manifest];
+        modules: [greeter_manifest, countdown_manifest, email_manifest, audit_manifest, runtime_task_manifest];
     }
 }
 
@@ -86,6 +118,25 @@ thread_local! {
 #[wasm_bindgen]
 pub async fn greet(name: String) -> core::result::Result<String, JsValue> {
     mediator().send(Greet { name }).await.map_err(to_js_error)
+}
+
+/// Consume a typed stream: each number is logged as soon as the handler sends
+/// it, and all numbers are returned when the stream ends.
+///
+/// A handler error is returned after the numbers that were already logged.
+#[wasm_bindgen]
+pub async fn countdown(from: u32, interval_ms: u32) -> core::result::Result<Vec<u32>, JsValue> {
+    let mut received = Vec::new();
+    mediator()
+        .stream(Countdown { from, interval_ms })
+        .try_for_each(|number| {
+            log(&format!("countdown: {number}"));
+            received.push(number);
+            async { Ok(()) }
+        })
+        .await
+        .map_err(|error| JsValue::from_str(&error))?;
+    Ok(received)
 }
 
 /// Verify that a generated mediator cannot be started twice.

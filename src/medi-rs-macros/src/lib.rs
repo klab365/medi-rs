@@ -8,12 +8,14 @@ mod composition;
 mod generate;
 mod handler;
 mod manifest;
+mod stream;
 mod task;
 
 use command::derive_medi_command_inner;
 use composition::finalize_composition_inner;
 use handler::medi_handler_inner;
 use manifest::medi_module_inner;
+use stream::{derive_medi_stream_request_inner, medi_stream_handler_inner};
 use task::medi_task_inner;
 
 /// Derive static command metadata for a command or query type.
@@ -23,6 +25,17 @@ use task::medi_task_inner;
 #[proc_macro_derive(MediCommand, attributes(medi_command))]
 pub fn derive_medi_command(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     derive_medi_command_inner(input)
+}
+
+/// Derive static stream metadata for a streaming request type.
+///
+/// `#[medi_stream(item_type = Type)]` selects the yielded item type and is
+/// required. `error_type = Type` defaults to `core::convert::Infallible`, and
+/// `capacity = expr` (the number of buffered items) defaults to `1` and must be
+/// a const expression greater than zero.
+#[proc_macro_derive(MediStreamRequest, attributes(medi_stream))]
+pub fn derive_medi_stream_request(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    derive_medi_stream_request_inner(input)
 }
 
 /// Declare a reusable mediator registration manifest owned by a Rust module.
@@ -41,6 +54,20 @@ pub fn medi_module(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 #[proc_macro_attribute]
 pub fn medi_handler(attribute: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     medi_handler_inner(attribute, input)
+}
+
+/// Generate a typed static-dispatch invoker for an async stream handler.
+///
+/// The last parameter is the stream request and the one before it is its
+/// `medi_rs::StreamSender`. Earlier parameters follow `#[medi_handler]`: an
+/// optional first `&AppMediator`, then value or `&` resources. The handler
+/// returns `Result<(), Error>` with the request's error type.
+#[proc_macro_attribute]
+pub fn medi_stream_handler(
+    attribute: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    medi_stream_handler_inner(attribute, input)
 }
 
 /// Generate a runtime task invoker with typed mediator resource injection.

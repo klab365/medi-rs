@@ -37,10 +37,10 @@ mediator! {
 }
 ```
 
-This explicit list is the routing boundary. Commands, resources, and events
-not included through a listed manifest are unavailable to that mediator.
-Duplicate command or resource registrations are rejected while expanding the
-macro.
+This explicit list is the routing boundary. Commands, streams, resources, and
+events not included through a listed manifest are unavailable to that
+mediator. Duplicate command, stream, or resource registrations are rejected
+while expanding the macro.
 
 ## Commands and handlers
 
@@ -57,6 +57,23 @@ a handler send commands or publish events through its own mediator.
 For a command route, `mediator.send(command).await` invokes exactly the one
 registered handler and returns that handler's concrete `Result<Response,
 Error>`. There is no framework-wide boxed handler error.
+
+## Streams
+
+`#[derive(MediStreamRequest)]` implements `StreamRequest` with the item type,
+error type, and channel capacity. `#[medi_stream_handler]` emits an invoker
+that injects the optional mediator and resources exactly like a command
+handler, followed by a `StreamSender` and the request.
+
+For every stream route, `mediator!` adds one field holding the selected
+runtime's `StreamChannel`, created in `new`, and implements a route used by the
+generated `stream` method. `stream` returns a composition of `futures`
+combinators that, on first poll, leases the route's channel and then polls the
+handler future and the channel receiver together. No task is spawned and
+nothing is allocated per stream. The handler's final `Ok(())` or `Err(error)`
+is queued behind its items as a terminal message, which orders an error after
+every item already sent. Dropping the stream drops the handler future and the
+lease; the next lease holder clears leftover items.
 
 ## Resources
 
@@ -97,6 +114,12 @@ The runtime feature selects the queue and worker-spawn implementation:
 - `tokio`: bounded Tokio MPSC queue and `tokio::spawn`.
 - `wasm`: futures MPSC queue and `wasm_bindgen_futures::spawn_local`.
 - `embassy`: Embassy channel and generated `#[embassy_executor::task]` workers.
+
+The same feature selects the stream channel: `TokioStreamChannel`
+(`tokio::sync::mpsc`), `WasmStreamChannel` (`futures::channel::mpsc`), or
+`EmbassyStreamChannel` (`embassy_sync::channel::Channel`, capacity as a const
+generic). Stream handler senders are independent of the capacity, so handlers
+never name a const generic.
 
 `tokio`, `wasm`, and `embassy` are mutually exclusive. Embassy queues have a
 fixed adapter capacity; the macro's capacity setting is accepted for a uniform

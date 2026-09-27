@@ -1,0 +1,5 @@
+error: a stream request requires `#[medi_stream(item_type = Type)]`
+ --> tests/ui/stream_request_without_item_type.rs:5:8
+  |
+5 | struct Numbers;
+  |        ^^^^^^^

@@ -1,0 +1,5 @@
+error: a stream handler requires a `StreamSender` parameter followed by the request parameter
+ --> tests/ui/stream_handler_without_sender.rs:8:1
+  |
+8 | async fn numbers(_: Numbers) -> Result<(), core::convert::Infallible> {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
