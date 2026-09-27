@@ -122,6 +122,7 @@ macro_rules! mediator {
             event_failure_reporter: [$($reporter)?];
             count: [];
             remaining: [$($rest),*];
+
         });
     };
 }
@@ -206,9 +207,44 @@ pub use stream::StreamRequest;
 pub use stream::StreamSender;
 
 pub use medi_rs_macros::{
-    __medi_rs_finalize_composition, MediCommand, MediStreamRequest, medi_handler, medi_module, medi_stream_handler,
-    medi_task,
+    __medi_rs_finalize_composition, MediCommand, MediStreamRequest, medi_handler, medi_module, medi_shutdown,
+    medi_startup, medi_stream_handler, medi_task,
 };
+
+/// The kind of a route in a generated mediator composition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RouteKind {
+    /// A request/response command route.
+    Command,
+    /// A request producing a stream of items.
+    Stream,
+    /// An asynchronously published event route.
+    Event,
+}
+
+/// Static metadata for one generated route.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RouteDescription {
+    /// The route's command, stream-request, or event type as written in its manifest.
+    pub message_name: &'static str,
+    /// Whether this is a command, stream, or event route.
+    pub kind: RouteKind,
+    /// Handler paths in invocation order.
+    pub handler_names: &'static [&'static str],
+}
+
+/// Static metadata for a generated mediator composition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CompositionDescription {
+    /// Name of the generated mediator type.
+    pub mediator_name: &'static str,
+    /// Number of manifests selected by `mediator!`.
+    pub module_count: usize,
+    /// Declared resource types in constructor order.
+    pub resource_names: &'static [&'static str],
+    /// Command, stream, and event routes in dispatch order.
+    pub routes: &'static [RouteDescription],
+}
 
 /// Metadata about a failed asynchronous event-handler invocation.
 ///

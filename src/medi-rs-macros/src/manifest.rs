@@ -20,6 +20,8 @@ pub(crate) struct ModuleManifest {
     pub(crate) events: Vec<EventManifest>,
     pub(crate) resources: Vec<Type>,
     pub(crate) tasks: Vec<syn::Path>,
+    pub(crate) startup: Vec<syn::Path>,
+    pub(crate) shutdown: Vec<syn::Path>,
 }
 
 impl Parse for ModuleManifest {
@@ -30,6 +32,8 @@ impl Parse for ModuleManifest {
             events: Vec::new(),
             resources: Vec::new(),
             tasks: Vec::new(),
+            startup: Vec::new(),
+            shutdown: Vec::new(),
         };
 
         while !input.is_empty() {
@@ -50,10 +54,22 @@ impl Parse for ModuleManifest {
                         "`tasks` requires a medi-rs runtime feature",
                     ));
                 }
+                "startup" if cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy")) => {
+                    manifest.startup.extend(parse_tasks(&body)?);
+                }
+                "shutdown" if cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy")) => {
+                    manifest.shutdown.extend(parse_tasks(&body)?);
+                }
+                "startup" | "shutdown" => {
+                    return Err(syn::Error::new(
+                        section.span(),
+                        "lifecycle hooks require a medi-rs runtime feature",
+                    ));
+                }
                 _ => {
                     return Err(syn::Error::new(
                         section.span(),
-                        "expected `commands`, `streams`, `events`, `resources`, or `tasks`",
+                        "expected `commands`, `streams`, `events`, `resources`, `tasks`, `startup`, or `shutdown`",
                     ));
                 }
             }
@@ -183,9 +199,17 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
         quote! { #resource; }
     });
     let tasks: Vec<_> = input.module.tasks.into_iter().map(|task| quote! { #task; }).collect();
-    // Do not emit an empty `tasks` section: task sections require a runtime,
-    // while command-only manifests must remain usable without one.
+    let startup: Vec<_> = input.module.startup.into_iter().map(|hook| quote! { #hook; }).collect();
+    let shutdown: Vec<_> = input
+        .module
+        .shutdown
+        .into_iter()
+        .map(|hook| quote! { #hook; })
+        .collect();
+    // Do not emit empty runtime-only sections so command-only manifests remain usable without a runtime.
     let tasks_section = (!tasks.is_empty()).then(|| quote! { tasks { #(#tasks)* } });
+    let startup_section = (!startup.is_empty()).then(|| quote! { startup { #(#startup)* } });
+    let shutdown_section = (!shutdown.is_empty()).then(|| quote! { shutdown { #(#shutdown)* } });
 
     quote! {
         macro_rules! #manifest {
@@ -209,6 +233,8 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                         events { #(#events)* }
                         resources { #(#resources)* }
                         #tasks_section
+                        #startup_section
+                        #shutdown_section
                     },];
                     decorators: [$($decorators),*];
                     event_failure_reporter: [$($reporter)?];

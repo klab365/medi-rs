@@ -55,9 +55,9 @@ pub(crate) fn decorate_handler_call(
 /// Parameters shared by generated handler invokers: an optional mediator
 /// context followed by injected resources.
 pub(crate) struct InjectedParameters<'a> {
-    context: Option<&'a Type>,
-    resources: Vec<&'a Type>,
-    indexes: Vec<Ident>,
+    pub(crate) context: Option<&'a Type>,
+    pub(crate) resources: Vec<&'a Type>,
+    pub(crate) indexes: Vec<Ident>,
 }
 
 impl<'a> InjectedParameters<'a> {

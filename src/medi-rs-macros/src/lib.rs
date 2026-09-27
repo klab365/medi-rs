@@ -7,6 +7,7 @@ mod command;
 mod composition;
 mod generate;
 mod handler;
+mod hook;
 mod manifest;
 mod stream;
 mod task;
@@ -14,6 +15,7 @@ mod task;
 use command::derive_medi_command_inner;
 use composition::finalize_composition_inner;
 use handler::medi_handler_inner;
+use hook::medi_hook_inner;
 use manifest::medi_module_inner;
 use stream::{derive_medi_stream_request_inner, medi_stream_handler_inner};
 use task::medi_task_inner;
@@ -54,6 +56,24 @@ pub fn medi_module(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 #[proc_macro_attribute]
 pub fn medi_handler(attribute: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     medi_handler_inner(attribute, input)
+}
+
+/// Register a synchronous startup hook with typed mediator and resource injection.
+///
+/// Hooks are listed in a module's `startup` section and run in composition
+/// order before event workers and runtime tasks are spawned.
+#[proc_macro_attribute]
+pub fn medi_startup(attribute: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    medi_hook_inner("startup", attribute, input)
+}
+
+/// Register a synchronous shutdown hook with typed mediator and resource injection.
+///
+/// Hooks are listed in a module's `shutdown` section and run in composition
+/// order after workers and runtime tasks have returned.
+#[proc_macro_attribute]
+pub fn medi_shutdown(attribute: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    medi_hook_inner("shutdown", attribute, input)
 }
 
 /// Generate a typed static-dispatch invoker for an async stream handler.

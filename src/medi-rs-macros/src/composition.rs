@@ -1,8 +1,9 @@
 //! Mediator-composition parsing, validation, and code generation.
 
 use crate::generate::{
-    ConstructorFields, EventDispatchConfig, collect_event_routes, collect_resource_types, collect_tasks,
-    generate_command_routes, generate_constructor, generate_event_support, generate_stream_support,
+    ConstructorFields, EventDispatchConfig, LifecycleHookCalls, collect_event_routes, collect_hooks,
+    collect_resource_types, collect_tasks, generate_command_routes, generate_composition_description,
+    generate_constructor, generate_event_support, generate_hook_calls, generate_stream_support,
     generate_task_only_start, generate_task_spawns, generate_task_workers,
 };
 use crate::manifest::ModuleManifest;
@@ -209,6 +210,10 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
         .collect();
     let resource_values = nested_tuple_value(&resource_names);
     let tasks = collect_tasks(&input.modules);
+    let startup_hooks = collect_hooks(&input.modules, true);
+    let shutdown_hooks = collect_hooks(&input.modules, false);
+    let startup_hook_calls = generate_hook_calls(&startup_hooks, "startup");
+    let shutdown_hook_calls = generate_hook_calls(&shutdown_hooks, "shutdown");
     let task_workers = generate_task_workers(&tasks, &input.name);
     let task_spawns = generate_task_spawns(&tasks);
     let command_routes = generate_command_routes(&input.modules, &input.name, &input.decorators);
@@ -235,6 +240,10 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
             EventDispatchConfig {
                 decorators: &input.decorators,
                 event_failure_reporter: input.event_failure_reporter.as_ref(),
+                hooks: LifecycleHookCalls {
+                    startup: &startup_hook_calls,
+                    shutdown: &shutdown_hook_calls,
+                },
             },
             &task_spawns,
         )
@@ -261,9 +270,14 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     let task_only_start = generate_task_only_start(
         has_events,
         !tasks.is_empty(),
+        !startup_hooks.is_empty() || !shutdown_hooks.is_empty(),
         &input.name,
         &resource_tuple,
         &task_spawns,
+        LifecycleHookCalls {
+            startup: &startup_hook_calls,
+            shutdown: &shutdown_hook_calls,
+        },
     );
     let task_shutdown_fields = (0..tasks.len()).map(|index| {
         let field = format_ident!("task_shutdown_{index}");
@@ -274,6 +288,7 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     let capacity = input.event_queue_capacity;
     let workers = input.event_workers;
     let count = input.count;
+    let composition_description = generate_composition_description(&input.modules, &name, &count);
     let stream_fields = stream_support.fields;
     let stream_method = stream_support.method;
     let stream_routes = stream_support.routes;
@@ -288,6 +303,7 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
             pub const EVENT_WORKERS: usize = #workers;
             /// Number of manifests included in this composition.
             pub const MODULE_COUNT: usize = <[()]>::len(&[#count]);
+            #composition_description
             /// Return whether this mediator has started its generated workers and tasks.
             ///
             /// Command-only mediators have no `start` method and always return `false`.

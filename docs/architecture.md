@@ -40,7 +40,10 @@ mediator! {
 This explicit list is the routing boundary. Commands, streams, resources, and
 events not included through a listed manifest are unavailable to that
 mediator. Duplicate command, stream, or resource registrations are rejected
-while expanding the macro.
+while expanding the macro. The generated mediator exposes this fixed graph
+through `COMPOSITION` and `composition()`, static metadata for its resource
+types and command, stream, and event routes. This supports tests and tooling
+without adding a runtime registry.
 
 ## Commands and handlers
 
@@ -106,6 +109,16 @@ once after every failed handler. Reporting also cannot stop later handlers.
 it deliberately does not contain the concrete error because independent routes
 may use unrelated error types. This supports logging, metrics, and alerting but
 is not a retry, dead-letter, or error-unification mechanism.
+
+## Lifecycle hooks
+
+When a runtime feature is enabled, manifests can list synchronous `startup`
+and `shutdown` hooks. The `#[medi_startup]` and `#[medi_shutdown]` attributes
+generate typed invokers with the same optional mediator and resource injection
+model as handlers. Generated `start` runs startup hooks once in
+manifest-composition order before spawning event workers and runtime tasks. The
+initiating `shutdown` call runs shutdown hooks once, in the same order, after
+all workers and tasks have returned.
 
 ## Runtime adapters
 
