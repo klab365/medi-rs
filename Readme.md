@@ -194,6 +194,23 @@ medi_module! {
 
 Use semicolons between resource, command, and stream entries, and commas between event handlers. When a handler is private in a feature module, use its crate-qualified path (for example, `crate::users::create_user`) in the manifest; the generated invoker remains crate-visible while the handler stays private. The manifest contains declarations only: it does not construct a mediator or register anything dynamically.
 
+With a runtime feature, manifests may also declare synchronous lifecycle hooks. Mark each hook with `#[medi_startup]` or `#[medi_shutdown]`, then list it in `startup` or `shutdown`. Hooks receive the same optional `&AppMediator` and typed resources as handlers. Startup hooks run once in module composition order before event workers and runtime tasks start; shutdown hooks run once in that order after they have returned.
+
+```rust,ignore
+#[medi_startup]
+fn verify_repository(_mediator: &AppMediator, repository: &Repository) { /* ... */ }
+
+#[medi_shutdown]
+fn close_repository(_mediator: &AppMediator, repository: &Repository) { /* ... */ }
+
+medi_module! {
+    manifest storage;
+    resources { Repository; }
+    startup { verify_repository; }
+    shutdown { close_repository; }
+}
+```
+
 ### `mediator!`
 
 Compose one or more manifests into the concrete application mediator. Its explicit `modules` list is the routing boundary and its order determines the order of resource arguments accepted by `new`.
@@ -209,6 +226,8 @@ mediator! {
 ```
 
 The generated type has `new`, `send`, `stream` when a stream route exists, and, when an event route exists, `publish`, `try_publish`, `start`, and `shutdown`. It uses the runtime selected by the enabled `tokio`, `wasm`, or `embassy` feature. The event configuration rules are described in [Event configuration](#event-configuration). `start` requires `'static` mediator storage (`start(spawner)` for Embassy).
+
+Every generated mediator also exposes `COMPOSITION` and `composition()`. This static metadata lists constructor resources and command, stream, and event routes with their handlers; it can be asserted in tests or exported by application tooling without a runtime registry.
 
 To observe asynchronous handler failures, configure a unit-struct `EventFailureReporter` type. The reporter runs once per failed handler and does not prevent subsequent handlers from running. Because event routes may have unrelated error types, `EventHandlerFailure` intentionally provides event and handler names, not the concrete error value.
 

@@ -20,7 +20,8 @@ use embassy_sync::{
 use embassy_time::{Duration, Timer};
 use medi_rs::stream::TryStreamExt;
 use medi_rs::{
-    MediCommand, MediStreamRequest, StreamSender, medi_handler, medi_module, medi_stream_handler, medi_task, mediator,
+    MediCommand, MediStreamRequest, StreamSender, medi_handler, medi_module, medi_shutdown, medi_startup,
+    medi_stream_handler, medi_task, mediator,
 };
 use panic_probe as _;
 use static_cell::StaticCell;
@@ -102,6 +103,16 @@ static BOARD: StaticCell<EmbassyBoard> = StaticCell::new();
 static BUTTON_A: StaticCell<AsyncMutex<CriticalSectionRawMutex, Input<'static>>> = StaticCell::new();
 static MEDIATOR: StaticCell<AppMediator> = StaticCell::new();
 
+#[medi_startup]
+fn initialize_board(_mediator: &AppMediator, _board: BoardApi) {
+    info!("mediator startup hook: board initialized");
+}
+
+#[medi_shutdown]
+fn release_board(_mediator: &AppMediator, _board: BoardApi) {
+    info!("mediator shutdown hook: board released");
+}
+
 #[medi_handler]
 async fn count_button_press(mediator: &AppMediator, board: BoardApi, _req: ButtonPressed) -> medi_rs::Result<u32> {
     board.toggle_activity_led();
@@ -177,6 +188,8 @@ async fn display(_mediator: &AppMediator, board: BoardApi) {
 medi_module! {
     manifest buttons_manifest;
     resources { BoardApi; ButtonInput; }
+    startup { initialize_board; }
+    shutdown { release_board; }
     tasks { button_monitor; display; }
     commands { ButtonPressed => count_button_press; }
     streams { BlinkPattern => blink_pattern; }

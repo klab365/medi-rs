@@ -1,6 +1,5 @@
-use medi_rs::{Result, medi_handler, medi_module, mediator};
+use medi_rs::{Result, medi_handler, medi_module, medi_shutdown, medi_startup, mediator};
 use std::sync::{Arc, Mutex};
-use tokio::time::{Duration, sleep};
 
 #[derive(Clone)]
 struct UserRegistered {
@@ -10,6 +9,16 @@ struct UserRegistered {
 struct EmailOutbox {
     sent: Arc<Mutex<Vec<String>>>,
 }
+#[medi_startup]
+fn open_outbox(_mediator: &EventMediator, _outbox: &EmailOutbox) {
+    println!("outbox is ready");
+}
+
+#[medi_shutdown]
+fn close_outbox(_mediator: &EventMediator, _outbox: &EmailOutbox) {
+    println!("outbox is closed");
+}
+
 #[medi_handler]
 async fn send_welcome_email(outbox: EmailOutbox, event: UserRegistered) -> Result<()> {
     outbox
@@ -19,7 +28,13 @@ async fn send_welcome_email(outbox: EmailOutbox, event: UserRegistered) -> Resul
         .push(format!("welcome email queued for {}", event.email));
     Ok(())
 }
-medi_module! { manifest events_manifest; resources { EmailOutbox; } events { UserRegistered => [send_welcome_email]; } }
+medi_module! {
+    manifest events_manifest;
+    resources { EmailOutbox; }
+    events { UserRegistered => [send_welcome_email]; }
+    startup { open_outbox; }
+    shutdown { close_outbox; }
+}
 mediator! { pub struct EventMediator { event_queue_capacity: 8; event_workers: 1; modules: [events_manifest]; } }
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -33,7 +48,8 @@ async fn main() -> Result<()> {
             email: "user@example.com".into(),
         })
         .await?;
-    sleep(Duration::from_millis(50)).await;
+    // Shutdown drains the accepted event before the shutdown hook closes the outbox.
+    mediator.shutdown().await?;
     println!("{}", outbox.sent.lock().unwrap().join("\n"));
     Ok(())
 }

@@ -2,10 +2,19 @@
 
 All notable changes to `medi-rs` are documented here.
 
-## Unreleased
+## 2.4.0
 
 ### Added
 
+- Generated mediators now expose static composition metadata through
+  `COMPOSITION` and `composition()`. `CompositionDescription` lists constructor
+  resource types and command, stream, and event routes with handler paths,
+  enabling tests and tooling without a runtime registry.
+- Runtime-enabled manifests can now register synchronous lifecycle hooks with
+  `#[medi_startup]`/`startup { ... }` and
+  `#[medi_shutdown]`/`shutdown { ... }`. Hooks use typed mediator and resource
+  injection, run in module-composition order, and run respectively before
+  generated workers/tasks start and after they have stopped.
 - Typed stream routes. `#[derive(MediStreamRequest)]` declares a request's
   item type, error type, and buffer capacity; `#[medi_stream_handler]`
   handlers send items through a `StreamSender` with the usual resource

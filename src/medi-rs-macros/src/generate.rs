@@ -1,6 +1,7 @@
 //! Code generation for composed mediators.
 
 use crate::handler::decorate_handler_call;
+use crate::hook::hook_invoker_path;
 use crate::manifest::{ModuleManifest, handler_invoker_path};
 use crate::stream::stream_handler_invoker_path;
 use crate::task::task_invoker_path;
@@ -36,10 +37,39 @@ pub(crate) struct EventSupport {
 pub(crate) struct EventDispatchConfig<'a> {
     pub(crate) decorators: &'a [Path],
     pub(crate) event_failure_reporter: Option<&'a Type>,
+    pub(crate) hooks: LifecycleHookCalls<'a>,
+}
+
+pub(crate) struct LifecycleHookCalls<'a> {
+    pub(crate) startup: &'a [proc_macro2::TokenStream],
+    pub(crate) shutdown: &'a [proc_macro2::TokenStream],
 }
 
 pub(crate) fn collect_tasks(modules: &[ModuleManifest]) -> Vec<syn::Path> {
     modules.iter().flat_map(|module| module.tasks.iter().cloned()).collect()
+}
+
+pub(crate) fn collect_hooks(modules: &[ModuleManifest], startup: bool) -> Vec<syn::Path> {
+    modules
+        .iter()
+        .flat_map(|module| {
+            if startup {
+                module.startup.iter().cloned()
+            } else {
+                module.shutdown.iter().cloned()
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn generate_hook_calls(hooks: &[syn::Path], phase: &str) -> Vec<proc_macro2::TokenStream> {
+    hooks
+        .iter()
+        .map(|hook| {
+            let invoker = hook_invoker_path(hook, phase);
+            quote! { #invoker(self, &self.resources); }
+        })
+        .collect()
 }
 
 pub(crate) fn collect_resource_types(modules: &[ModuleManifest]) -> Vec<Type> {
@@ -47,6 +77,43 @@ pub(crate) fn collect_resource_types(modules: &[ModuleManifest]) -> Vec<Type> {
         .iter()
         .flat_map(|module| module.resources.iter().cloned())
         .collect()
+}
+
+pub(crate) fn generate_composition_description(
+    modules: &[ModuleManifest],
+    mediator_name: &Ident,
+    module_count: &proc_macro2::TokenStream,
+) -> proc_macro2::TokenStream {
+    let resources = modules.iter().flat_map(|module| &module.resources).map(|resource| {
+        quote! { stringify!(#resource) }
+    });
+    let commands = modules.iter().flat_map(|module| &module.commands).map(|route| {
+        let request = &route.request;
+        let handler = &route.handler;
+        quote! { ::medi_rs::RouteDescription { message_name: stringify!(#request), kind: ::medi_rs::RouteKind::Command, handler_names: &[stringify!(#handler)] } }
+    });
+    let streams = modules.iter().flat_map(|module| &module.streams).map(|route| {
+        let request = &route.request;
+        let handler = &route.handler;
+        quote! { ::medi_rs::RouteDescription { message_name: stringify!(#request), kind: ::medi_rs::RouteKind::Stream, handler_names: &[stringify!(#handler)] } }
+    });
+    let events = collect_event_routes(modules).into_iter().map(|(event, handlers)| {
+        quote! { ::medi_rs::RouteDescription { message_name: stringify!(#event), kind: ::medi_rs::RouteKind::Event, handler_names: &[#(stringify!(#handlers)),*] } }
+    });
+    quote! {
+        /// Static description of this mediator's selected resources and routes.
+        pub const COMPOSITION: ::medi_rs::CompositionDescription = ::medi_rs::CompositionDescription {
+            mediator_name: stringify!(#mediator_name),
+            module_count: <[()]>::len(&[#module_count]),
+            resource_names: &[#(#resources),*],
+            routes: &[#(#commands,)* #(#streams,)* #(#events,)*],
+        };
+
+        /// Return static metadata for this mediator's composition.
+        pub const fn composition() -> ::medi_rs::CompositionDescription {
+            Self::COMPOSITION
+        }
+    }
 }
 
 /// Mediator fields initialized by the generated constructor besides resources
@@ -311,6 +378,7 @@ fn generate_event_start(
     resource_tuple: &proc_macro2::TokenStream,
     worker: &Ident,
     task_spawns: &[proc_macro2::TokenStream],
+    startup_hooks: &[proc_macro2::TokenStream],
 ) -> proc_macro2::TokenStream {
     if cfg!(feature = "embassy") {
         quote! {
@@ -321,6 +389,7 @@ fn generate_event_start(
             pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
                 self.lifecycle.start()?;
+                #(#startup_hooks)*
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
                     self.lifecycle.begin();
@@ -343,6 +412,7 @@ fn generate_event_start(
             pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
                 self.lifecycle.start()?;
+                #(#startup_hooks)*
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
                     self.lifecycle.begin();
@@ -433,7 +503,8 @@ pub(crate) fn generate_event_support(
         let field = format_ident!("task_shutdown_{index}");
         quote! { self.#field.cancel(); }
     });
-    let start = generate_event_start(resource_tuple, &worker, task_spawns);
+    let start = generate_event_start(resource_tuple, &worker, task_spawns, config.hooks.startup);
+    let shutdown_hooks = config.hooks.shutdown;
     EventSupport {
         job: quote! { #[allow(non_camel_case_types)] enum #job { #(#variants,)* Shutdown } },
         field: quote! { event_queue: #queue_type, },
@@ -448,7 +519,8 @@ pub(crate) fn generate_event_support(
         /// Stop accepting events, drain accepted events, and wait for all event
         /// workers and registered runtime tasks to return.
         pub async fn shutdown(&self) -> ::medi_rs::Result<()> {
-            if self.lifecycle.request_shutdown() {
+            let initiated_shutdown = self.lifecycle.request_shutdown();
+            if initiated_shutdown {
                 #(#task_cancellations)*
                 ::medi_rs::EventQueue::close(&self.event_queue).await;
                 let event_workers = Self::EVENT_WORKERS;
@@ -457,6 +529,9 @@ pub(crate) fn generate_event_support(
                 }
             }
             self.lifecycle.wait().await;
+            if initiated_shutdown {
+                #(#shutdown_hooks)*
+            }
             Ok(())
         } },
         worker: quote! { #worker_function impl #name { #start } },
@@ -466,17 +541,21 @@ pub(crate) fn generate_event_support(
 pub(crate) fn generate_task_only_start(
     has_events: bool,
     has_tasks: bool,
+    has_hooks: bool,
     name: &Ident,
     resource_tuple: &proc_macro2::TokenStream,
     task_spawns: &[proc_macro2::TokenStream],
+    hooks: LifecycleHookCalls<'_>,
 ) -> proc_macro2::TokenStream {
-    if has_events || !has_tasks {
+    if has_events || (!has_tasks && !has_hooks) {
         return quote! {};
     }
     let task_cancellations = (0..task_spawns.len()).map(|index| {
         let field = format_ident!("task_shutdown_{index}");
         quote! { self.#field.cancel(); }
     });
+    let startup_hooks = hooks.startup;
+    let shutdown_hooks = hooks.shutdown;
     if cfg!(feature = "embassy") {
         quote! { impl #name {
             /// Start the registered Embassy tasks.
@@ -485,15 +564,20 @@ pub(crate) fn generate_task_only_start(
             /// spawning work when this mediator was already started.
             pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 self.lifecycle.start()?;
+                #(#startup_hooks)*
                 #(#task_spawns)*
                 Ok(())
             }
             /// Signal registered runtime tasks and wait for them to return.
             pub async fn shutdown(&self) -> ::medi_rs::Result<()> {
-                if self.lifecycle.request_shutdown() {
+                let initiated_shutdown = self.lifecycle.request_shutdown();
+                if initiated_shutdown {
                     #(#task_cancellations)*
                 }
                 self.lifecycle.wait().await;
+                if initiated_shutdown {
+                    #(#shutdown_hooks)*
+                }
                 Ok(())
             }
         } }
@@ -505,15 +589,20 @@ pub(crate) fn generate_task_only_start(
             /// spawning work when this mediator was already started.
             pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 self.lifecycle.start()?;
+                #(#startup_hooks)*
                 #(#task_spawns)*
                 Ok(())
             }
             /// Signal registered runtime tasks and wait for them to return.
             pub async fn shutdown(&self) -> ::medi_rs::Result<()> {
-                if self.lifecycle.request_shutdown() {
+                let initiated_shutdown = self.lifecycle.request_shutdown();
+                if initiated_shutdown {
                     #(#task_cancellations)*
                 }
                 self.lifecycle.wait().await;
+                if initiated_shutdown {
+                    #(#shutdown_hooks)*
+                }
                 Ok(())
             }
         } }
