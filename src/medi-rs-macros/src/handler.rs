@@ -52,6 +52,108 @@ pub(crate) fn decorate_handler_call(
     }
 }
 
+/// Parameters shared by generated handler invokers: an optional mediator
+/// context followed by injected resources.
+pub(crate) struct InjectedParameters<'a> {
+    context: Option<&'a Type>,
+    resources: Vec<&'a Type>,
+    indexes: Vec<Ident>,
+}
+
+impl<'a> InjectedParameters<'a> {
+    /// Split the parameters preceding the handler's message (and, for stream
+    /// handlers, its sender) into an optional mediator context and resources.
+    pub(crate) fn parse(arguments: Vec<&'a Type>) -> SynResult<Self> {
+        let (context, resources): (Option<&Type>, Vec<&Type>) = match arguments.first() {
+            Some(Type::Reference(reference)) => (Some(reference.elem.as_ref()), arguments[1..].to_vec()),
+            _ => (None, arguments),
+        };
+        if let Some(reference) = resources.iter().find_map(|resource| match resource {
+            Type::Reference(reference) if reference.mutability.is_some() => Some(reference),
+            _ => None,
+        }) {
+            return Err(syn::Error::new_spanned(
+                reference,
+                "mutable resource references are not supported; use a synchronization primitive or an owner task",
+            ));
+        }
+        let indexes = (0..resources.len()).map(|index| format_ident!("I{index}")).collect();
+        Ok(Self {
+            context,
+            resources,
+            indexes,
+        })
+    }
+
+    /// Call the handler with the optional mediator and resolved resources
+    /// followed by `trailing` arguments.
+    pub(crate) fn handler_call(&self, name: &Ident, trailing: &proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+        let call_arguments = self
+            .resources
+            .iter()
+            .zip(&self.indexes)
+            .map(|(resource, index)| match resource {
+                Type::Reference(reference) => {
+                    let resource = &reference.elem;
+                    quote! { ::medi_rs::tlist::get_ref::<#resource, #index, R>(resources) }
+                }
+                _ => quote! { ::medi_rs::tlist::get::<#resource, #index, R>(resources) },
+            });
+        if self.context.is_some() {
+            quote! { #name(mediator, #(#call_arguments,)* #trailing).await }
+        } else {
+            quote! { #name(#(#call_arguments,)* #trailing).await }
+        }
+    }
+
+    pub(crate) fn mediator_parameter(&self) -> proc_macro2::TokenStream {
+        match self.context {
+            Some(context) => quote! { mediator: &#context, },
+            None => quote! { _mediator: &M, },
+        }
+    }
+
+    /// Invoker generics, preceded by `lifetimes` declared on the handler.
+    pub(crate) fn helper_generics<'l>(
+        &self,
+        lifetimes: impl Iterator<Item = &'l syn::LifetimeParam>,
+    ) -> proc_macro2::TokenStream {
+        let indexes = &self.indexes;
+        if self.context.is_some() {
+            quote! { <#(#lifetimes,)* R, #(#indexes,)*> }
+        } else {
+            quote! { <#(#lifetimes,)* M, R, #(#indexes,)*> }
+        }
+    }
+
+    pub(crate) fn resource_bounds(&self) -> Vec<proc_macro2::TokenStream> {
+        self.resources
+            .iter()
+            .zip(&self.indexes)
+            .map(|(resource, index)| match resource {
+                Type::Reference(reference) => {
+                    let resource = &reference.elem;
+                    quote! { R: ::medi_rs::tlist::GetRef<#resource, #index>, }
+                }
+                _ => quote! { R: ::medi_rs::tlist::Get<#resource, #index>, },
+            })
+            .collect()
+    }
+}
+
+/// The typed parameter list of a handler function.
+pub(crate) fn typed_arguments(function: &ItemFn) -> Vec<&Type> {
+    function
+        .sig
+        .inputs
+        .iter()
+        .filter_map(|argument| match argument {
+            FnArg::Typed(argument) => Some(argument.ty.as_ref()),
+            FnArg::Receiver(_) => None,
+        })
+        .collect()
+}
+
 pub fn medi_handler_inner(
     attribute: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
@@ -63,15 +165,7 @@ pub fn medi_handler_inner(
     let function = parse_macro_input!(input as ItemFn);
     let name = &function.sig.ident;
     let helper = format_ident!("__medi_handler_{name}");
-    let mut arguments: Vec<&Type> = function
-        .sig
-        .inputs
-        .iter()
-        .filter_map(|argument| match argument {
-            FnArg::Typed(argument) => Some(argument.ty.as_ref()),
-            FnArg::Receiver(_) => None,
-        })
-        .collect();
+    let mut arguments = typed_arguments(&function);
 
     if arguments.is_empty() {
         return syn::Error::new_spanned(&function.sig, "a mediator handler requires a message parameter")
@@ -80,53 +174,16 @@ pub fn medi_handler_inner(
     }
 
     let message = arguments.pop().expect("checked above");
-    let (context, resources): (Option<&Type>, Vec<&Type>) = match arguments.first() {
-        Some(Type::Reference(reference)) => (Some(reference.elem.as_ref()), arguments[1..].to_vec()),
-        _ => (None, arguments),
+    let parameters = match InjectedParameters::parse(arguments) {
+        Ok(parameters) => parameters,
+        Err(error) => return error.into_compile_error().into(),
     };
-    if let Some(reference) = resources.iter().find_map(|resource| match resource {
-        Type::Reference(reference) if reference.mutability.is_some() => Some(reference),
-        _ => None,
-    }) {
-        return syn::Error::new_spanned(
-            reference,
-            "mutable resource references are not supported; use a synchronization primitive or an owner task",
-        )
-        .into_compile_error()
-        .into();
-    }
 
-    let indexes: Vec<Ident> = (0..resources.len()).map(|index| format_ident!("I{index}")).collect();
-    let call_arguments = resources.iter().zip(&indexes).map(|(resource, index)| match resource {
-        Type::Reference(reference) => {
-            let resource = &reference.elem;
-            quote! { ::medi_rs::tlist::get_ref::<#resource, #index, R>(resources) }
-        }
-        _ => quote! { ::medi_rs::tlist::get::<#resource, #index, R>(resources) },
-    });
-
-    let handler_call = if context.is_some() {
-        quote! { #name(mediator, #(#call_arguments,)* message).await }
-    } else {
-        quote! { #name(#(#call_arguments,)* message).await }
-    };
+    let handler_call = parameters.handler_call(name, &quote! { message });
     let helper_body = decorate_handler_call(&decorators, quote! { message }, &handler_call);
-    let mediator_parameter = match context {
-        Some(context) => quote! { mediator: &#context, },
-        None => quote! { _mediator: &M, },
-    };
-    let helper_generics = if context.is_some() {
-        quote! { <R, #(#indexes,)*> }
-    } else {
-        quote! { <M, R, #(#indexes,)*> }
-    };
-    let resource_bounds = resources.iter().zip(&indexes).map(|(resource, index)| match resource {
-        Type::Reference(reference) => {
-            let resource = &reference.elem;
-            quote! { R: ::medi_rs::tlist::GetRef<#resource, #index>, }
-        }
-        _ => quote! { R: ::medi_rs::tlist::Get<#resource, #index>, },
-    });
+    let mediator_parameter = parameters.mediator_parameter();
+    let helper_generics = parameters.helper_generics(core::iter::empty());
+    let resource_bounds = parameters.resource_bounds();
     // Decorator continuations must be `Send`; when they capture `resources`,
     // the referenced resource tuple must therefore be `Sync`.
     let decorator_resource_bound = (!decorators.is_empty()).then(|| quote! { R: Sync, });

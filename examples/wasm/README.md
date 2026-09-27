@@ -46,6 +46,10 @@ The example exports:
   mediator route exposed through a second binding.
 - `publish_user_registered(email: string): Promise<void>` — queued event
   publication.
+- `countdown(from: number, interval_ms: number): Promise<Uint32Array>` — a
+  typed stream route. The `Countdown` handler sends one number per interval
+  through the futures `mpsc` stream channel selected by the `wasm` feature;
+  the export logs each number as it arrives.
 
 The mediator uses a bounded queue:
 

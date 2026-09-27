@@ -18,7 +18,10 @@ use embassy_sync::{
     mutex::Mutex as AsyncMutex,
 };
 use embassy_time::{Duration, Timer};
-use medi_rs::{MediCommand, medi_handler, medi_module, medi_task, mediator};
+use medi_rs::stream::TryStreamExt;
+use medi_rs::{
+    MediCommand, MediStreamRequest, StreamSender, medi_handler, medi_module, medi_stream_handler, medi_task, mediator,
+};
 use panic_probe as _;
 use static_cell::StaticCell;
 
@@ -29,6 +32,20 @@ bind_interrupts!(
 #[derive(MediCommand)]
 #[medi_command(return_type = u32, error_type = medi_rs::Error)]
 struct ButtonPressed;
+
+/// Blink the activity LED and stream the number of each completed blink.
+#[derive(MediStreamRequest)]
+#[medi_stream(item_type = u32, error_type = BlinkError, capacity = 2)]
+struct BlinkPattern {
+    blinks: u32,
+}
+
+#[derive(defmt::Format)]
+enum BlinkError {
+    TooManyBlinks,
+}
+
+const MAX_BLINKS: u32 = 5;
 
 #[derive(Clone)]
 struct ButtonObserved {
@@ -99,6 +116,26 @@ async fn observe_button_press(board: BoardApi, event: ButtonObserved) -> medi_rs
     Ok(())
 }
 
+#[medi_stream_handler]
+async fn blink_pattern(
+    board: BoardApi,
+    sender: StreamSender<'_, BlinkPattern>,
+    request: BlinkPattern,
+) -> Result<(), BlinkError> {
+    if request.blinks > MAX_BLINKS {
+        return Err(BlinkError::TooManyBlinks);
+    }
+    for blink in 1..=request.blinks {
+        board.toggle_activity_led();
+        Timer::after(Duration::from_millis(100)).await;
+        board.toggle_activity_led();
+        Timer::after(Duration::from_millis(100)).await;
+        // Waits while the static Embassy channel (capacity 2) is full.
+        sender.send(blink).await;
+    }
+    Ok(())
+}
+
 #[medi_task]
 async fn button_monitor(mediator: &AppMediator, button: ButtonInput) {
     loop {
@@ -109,6 +146,21 @@ async fn button_monitor(mediator: &AppMediator, button: ButtonInput) {
             count,
             OBSERVED_COUNT.load(Ordering::Relaxed)
         );
+
+        // Every sixth press requests too many blinks to show the stream error.
+        let blinks = mediator
+            .stream(BlinkPattern {
+                blinks: count % (MAX_BLINKS + 1) + 1,
+            })
+            .try_for_each(|blink| {
+                info!("blink {} done", blink);
+                async { Ok(()) }
+            })
+            .await;
+        if let Err(error) = blinks {
+            info!("blink pattern failed: {}", error);
+        }
+
         Timer::after(Duration::from_millis(200)).await;
         button.lock().await.wait_for_high().await;
     }
@@ -127,6 +179,7 @@ medi_module! {
     resources { BoardApi; ButtonInput; }
     tasks { button_monitor; display; }
     commands { ButtonPressed => count_button_press; }
+    streams { BlinkPattern => blink_pattern; }
     events { ButtonObserved => [observe_button_press]; }
 }
 

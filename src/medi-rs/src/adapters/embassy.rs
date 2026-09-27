@@ -1,7 +1,8 @@
 use crate::{Error, Result, TryPublishError};
 use core::sync::atomic::{AtomicBool, Ordering};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
+use embassy_sync::channel::{Channel, SendDynamicReceiver, SendDynamicSender};
+use embassy_sync::mutex::{Mutex, MutexGuard};
 
 /// Embassy queue whose capacity is selected by the generated mediator type.
 pub struct EmbassyEventQueue<T: 'static, const CAPACITY: usize> {
@@ -42,5 +43,68 @@ impl<T: Send + 'static, const CAPACITY: usize> crate::EventQueue<T> for EmbassyE
     }
     async fn recv(&self) -> Result<T> {
         Ok(self.channel.receive().await)
+    }
+}
+
+/// Embassy stream channel whose capacity is selected by the stream request.
+pub struct EmbassyStreamChannel<T: 'static, const CAPACITY: usize> {
+    channel: Channel<CriticalSectionRawMutex, T, CAPACITY>,
+    lease: Mutex<CriticalSectionRawMutex, ()>,
+}
+
+/// Handler-side send handle for [`EmbassyStreamChannel`].
+///
+/// It is independent of the channel capacity, so handlers can name it without
+/// a const generic.
+pub struct EmbassyStreamSender<'a, T>(SendDynamicSender<'a, T>);
+
+impl<T> Clone for EmbassyStreamSender<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for EmbassyStreamSender<'_, T> {}
+
+/// Consumer-side receive handle for [`EmbassyStreamChannel`].
+pub struct EmbassyStreamReceiver<'a, T> {
+    receiver: SendDynamicReceiver<'a, T>,
+    _lease: MutexGuard<'a, CriticalSectionRawMutex, ()>,
+}
+
+impl<T: Send + 'static, const CAPACITY: usize> crate::StreamChannel<T> for EmbassyStreamChannel<T, CAPACITY> {
+    type Sender<'a> = EmbassyStreamSender<'a, T>;
+    type Receiver<'a> = EmbassyStreamReceiver<'a, T>;
+
+    fn new(_: usize) -> Self {
+        Self {
+            channel: Channel::new(),
+            lease: Mutex::new(()),
+        }
+    }
+
+    async fn open(&self) -> (Self::Sender<'_>, Self::Receiver<'_>) {
+        let lease = self.lease.lock().await;
+        // Discard items left behind by a cancelled stream.
+        self.channel.clear();
+        (
+            EmbassyStreamSender(self.channel.sender().into()),
+            EmbassyStreamReceiver {
+                receiver: self.channel.receiver().into(),
+                _lease: lease,
+            },
+        )
+    }
+}
+
+impl<T: Send> crate::StreamChannelSender<T> for EmbassyStreamSender<'_, T> {
+    async fn send(&self, item: T) {
+        self.0.send(item).await;
+    }
+}
+
+impl<T: Send> crate::StreamChannelReceiver<T> for EmbassyStreamReceiver<'_, T> {
+    async fn recv(&mut self) -> Option<T> {
+        Some(self.receiver.receive().await)
     }
 }

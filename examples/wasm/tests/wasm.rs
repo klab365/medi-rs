@@ -36,3 +36,17 @@ async fn generated_mediator_publish_returns_ok() {
 fn generated_mediator_rejects_a_second_start() {
     assert!(medi_rs_wasm_example::duplicate_start_is_rejected());
 }
+
+#[wasm_bindgen_test(async)]
+async fn countdown_streams_numbers_in_order() {
+    let numbers = medi_rs_wasm_example::countdown(3, 1).await.unwrap();
+
+    assert_eq!(numbers, vec![3, 2, 1]);
+}
+
+#[wasm_bindgen_test(async)]
+async fn countdown_stream_reports_handler_errors() {
+    let error = medi_rs_wasm_example::countdown(61, 1).await.unwrap_err();
+
+    assert_eq!(error.as_string().unwrap(), "countdown from 61 is too long");
+}

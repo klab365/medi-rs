@@ -11,6 +11,13 @@ through that trait-based API. `button_monitor` sends `ButtonPressed`, whose
 handler also uses `BoardApi` and publishes `ButtonObserved`; the generated
 Embassy worker invokes the event handler.
 
+After each press, `button_monitor` also opens the `BlinkPattern` stream. Its
+`#[medi_stream_handler]` blinks the LED through the injected `BoardApi` and
+sends each completed blink through a statically allocated
+`embassy_sync::channel::Channel` owned by the mediator. The task logs every
+blink as it arrives; every sixth press requests too many blinks, and the
+handler's `BlinkError` is yielded as the stream's final item.
+
 ## Prerequisites
 
 ```sh
@@ -25,5 +32,5 @@ cd examples/embassy-microbit-v2
 cargo run --release
 ```
 
-Press button A to send the command. The count and observed event count are
-printed through `defmt-rtt`.
+Press button A to send the command. The count, observed event count, and
+streamed blinks are printed through `defmt-rtt`.

@@ -6,6 +6,18 @@ All notable changes to `medi-rs` are documented here.
 
 ### Added
 
+- Typed stream routes. `#[derive(MediStreamRequest)]` declares a request's
+  item type, error type, and buffer capacity; `#[medi_stream_handler]`
+  handlers send items through a `StreamSender` with the usual resource
+  injection; `medi_module!` accepts a `streams { Request => handler; }`
+  section; and generated mediators provide `stream(request)`, which returns a
+  `Stream<Item = Result<Item, Error>>`. Streams run the handler inline while
+  polled, yield a handler error once after the items already sent, and cancel
+  the handler when dropped. Each route owns one static channel selected by the
+  runtime feature (Tokio `mpsc`, futures `mpsc` for Wasm, or an Embassy
+  `Channel`) through the new `StreamChannel` adapter trait; opening a stream
+  does not allocate. Stream routes require a runtime feature.
+
 - Handler resources can be borrowed as `&Resource` without requiring `Clone`.
   Shared borrowed resources remain subject to Rust's normal `Sync` requirements
   when handlers run concurrently; mutable resource references are rejected in

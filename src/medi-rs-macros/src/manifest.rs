@@ -16,6 +16,7 @@ pub(crate) struct EventManifest {
 
 pub(crate) struct ModuleManifest {
     pub(crate) commands: Vec<CommandManifest>,
+    pub(crate) streams: Vec<CommandManifest>,
     pub(crate) events: Vec<EventManifest>,
     pub(crate) resources: Vec<Type>,
     pub(crate) tasks: Vec<syn::Path>,
@@ -25,6 +26,7 @@ impl Parse for ModuleManifest {
     fn parse(input: ParseStream<'_>) -> SynResult<Self> {
         let mut manifest = Self {
             commands: Vec::new(),
+            streams: Vec::new(),
             events: Vec::new(),
             resources: Vec::new(),
             tasks: Vec::new(),
@@ -36,6 +38,7 @@ impl Parse for ModuleManifest {
             braced!(body in input);
             match section.to_string().as_str() {
                 "commands" => manifest.commands.extend(parse_commands(&body)?),
+                "streams" => manifest.streams.extend(parse_commands(&body)?),
                 "events" => manifest.events.extend(parse_events(&body)?),
                 "resources" => manifest.resources.extend(parse_resources(&body)?),
                 "tasks" if cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy")) => {
@@ -50,7 +53,7 @@ impl Parse for ModuleManifest {
                 _ => {
                     return Err(syn::Error::new(
                         section.span(),
-                        "expected `commands`, `events`, `resources`, or `tasks`",
+                        "expected `commands`, `streams`, `events`, `resources`, or `tasks`",
                     ));
                 }
             }
@@ -166,6 +169,11 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
         let handler = command.handler;
         quote! { #request => #handler; }
     });
+    let streams = input.module.streams.into_iter().map(|stream| {
+        let request = stream.request;
+        let handler = stream.handler;
+        quote! { #request => #handler; }
+    });
     let events = input.module.events.into_iter().map(|event| {
         let event_type = event.event;
         let handlers = event.handlers;
@@ -197,6 +205,7 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                     event_workers: $workers;
                     modules: [$($modules)* {
                         commands { #(#commands)* }
+                        streams { #(#streams)* }
                         events { #(#events)* }
                         resources { #(#resources)* }
                         #tasks_section

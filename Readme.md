@@ -18,7 +18,7 @@ Choose one runtime adapter for event processing:
 | `wasm`    | `wasm_bindgen_futures` | WebAssembly event workers use `spawn_local`.                               |
 | `embassy` | Embassy                | `no_std` embedded applications; queue capacity must be a const expression. |
 
-The runtime features are mutually exclusive. Command-only mediators need no runtime feature. Events and runtime tasks require exactly one adapter feature.
+The runtime features are mutually exclusive. Command-only mediators need no runtime feature. Events, streams, and runtime tasks require exactly one adapter feature. The feature also selects the channel behind stream routes (see [Streams](#streams)).
 
 ```toml
 [dependencies]
@@ -80,7 +80,7 @@ The registration graph is fixed where `mediator!` is expanded:
 3. In each feature-local module, use `medi_module!` to list its resources and routes.
 4. At the application boundary, select those manifests with `mediator!`.
 
-`mediator!` generates one concrete mediator type. For every command route it implements a route for that command type and mediator type; `send` therefore calls the selected handler directly. Resources live in a typed nested tuple and are cloned into handler parameters by their compile-time tuple position. There is no runtime `TypeId` lookup, boxed handler registry, or handler selection at runtime. A command or resource registered twice is rejected while expanding the composition, and requesting an undeclared handler resource fails type checking.
+`mediator!` generates one concrete mediator type. For every command route it implements a route for that command type and mediator type; `send` therefore calls the selected handler directly. Resources live in a typed nested tuple and are cloned into handler parameters by their compile-time tuple position. There is no runtime `TypeId` lookup, boxed handler registry, or handler selection at runtime. A command, stream request, or resource registered twice is rejected while expanding the composition, and requesting an undeclared handler resource fails type checking.
 
 ## Macro reference
 
@@ -148,20 +148,51 @@ mediator! {
 }
 ```
 
+### `#[derive(MediStreamRequest)]` and `#[medi_stream(...)]`
+
+Derive `MediStreamRequest` on a request whose handler produces a stream. It implements `StreamRequest`:
+
+```rust
+#[derive(medi_rs::MediStreamRequest)]
+#[medi_stream(item_type = User, error_type = SearchError, capacity = 4)]
+struct SearchUsers { query: String }
+```
+
+`item_type` is required. `error_type` defaults to `core::convert::Infallible`. `capacity` is the number of items the route's static channel buffers before the handler waits; it defaults to `1`, must be greater than zero, and must be a const expression.
+
+### `#[medi_stream_handler]`
+
+Apply this attribute to the async handler of a stream request. Each stream request has exactly one handler per mediator; registering it twice, in one module or across modules, is a compile-time error. The last parameter is the request and the parameter before it is a `StreamSender<'_, Request>`. Earlier parameters follow the `#[medi_handler]` rules: an optional first `&AppMediator`, then value or borrowed resources. The handler returns `Result<(), Error>` with the request's error type. Decorators do not apply to stream routes.
+
+```rust,ignore
+#[medi_stream_handler]
+async fn search_users(
+    repository: UserRepository,
+    sender: StreamSender<'_, SearchUsers>,
+    request: SearchUsers,
+) -> Result<(), SearchError> {
+    for user in repository.search(&request.query).await? {
+        sender.send(user).await;
+    }
+    Ok(())
+}
+```
+
 ### `medi_module!`
 
-Declare a reusable, feature-local manifest. It contains zero or more `resources`, `commands`, and `events` sections in any order. With a runtime feature, manifests may additionally contain a `tasks` section. Commands have one handler; events have one or more handlers. The macro creates the named manifest for inclusion by `mediator!`.
+Declare a reusable, feature-local manifest. It contains zero or more `resources`, `commands`, `streams`, and `events` sections in any order. With a runtime feature, manifests may additionally contain a `tasks` section. Commands have one handler; events have one or more handlers. The macro creates the named manifest for inclusion by `mediator!`.
 
 ```rust
 medi_module! {
     manifest users;
     resources { UserRepository; Clock; }
     commands { CreateUser => create_user; }
+    streams { SearchUsers => search_users; }
     events { UserCreated => [send_welcome_email, write_audit_log]; }
 }
 ```
 
-Use semicolons between resource and command entries, and commas between event handlers. When a handler is private in a feature module, use its crate-qualified path (for example, `crate::users::create_user`) in the manifest; the generated invoker remains crate-visible while the handler stays private. The manifest contains declarations only: it does not construct a mediator or register anything dynamically.
+Use semicolons between resource, command, and stream entries, and commas between event handlers. When a handler is private in a feature module, use its crate-qualified path (for example, `crate::users::create_user`) in the manifest; the generated invoker remains crate-visible while the handler stays private. The manifest contains declarations only: it does not construct a mediator or register anything dynamically.
 
 ### `mediator!`
 
@@ -177,7 +208,7 @@ mediator! {
 }
 ```
 
-The generated type has `new`, `send`, and, when an event route exists, `publish`, `try_publish`, `start`, and `shutdown`. It uses the runtime selected by the enabled `tokio`, `wasm`, or `embassy` feature. The event configuration rules are described in [Event configuration](#event-configuration). `start` requires `'static` mediator storage (`start(spawner)` for Embassy).
+The generated type has `new`, `send`, `stream` when a stream route exists, and, when an event route exists, `publish`, `try_publish`, `start`, and `shutdown`. It uses the runtime selected by the enabled `tokio`, `wasm`, or `embassy` feature. The event configuration rules are described in [Event configuration](#event-configuration). `start` requires `'static` mediator storage (`start(spawner)` for Embassy).
 
 To observe asynchronous handler failures, configure a unit-struct `EventFailureReporter` type. The reporter runs once per failed handler and does not prevent subsequent handlers from running. Because event routes may have unrelated error types, `EventHandlerFailure` intentionally provides event and handler names, not the concrete error value.
 
@@ -290,6 +321,71 @@ medi_module! {
 }
 ```
 
+## Streams
+
+A stream request returns its results incrementally instead of as one final response. The handler pushes items through its `StreamSender`; `mediator.stream(request)` returns a typed `Stream<Item = Result<Item, Error>>`.
+
+### Consuming a stream — no `pin!` needed
+
+> **Recommended:** consume streams with `try_for_each`, `try_collect`, or `for_each`. These combinators take ownership of the stream and pin it internally, so application code never has to deal with pinning. A handler error ends the stream and is returned through `?`.
+
+```rust,ignore
+use medi_rs::stream::TryStreamExt;
+
+// Process each user as soon as the handler sends it.
+mediator
+    .stream(SearchUsers { query: "Ada".into() })
+    .try_for_each(|user| async move {
+        println!("found {user}");
+        Ok(())
+    })
+    .await?;
+
+// Or collect every item; the first error is returned instead.
+let users: Vec<User> = mediator.stream(SearchUsers { query: "Ada".into() }).try_collect().await?;
+```
+
+`medi_rs::stream` re-exports `Stream`, `StreamExt`, and `TryStreamExt` from `futures`, so further combinators such as `take`, `map`, and `try_filter` are available without adding a dependency.
+
+### Manual `next()` loops
+
+Use a manual loop only when you need control flow the combinators do not provide, such as `break` or `select!`. `next()` requires an `Unpin` stream, and the returned stream is `!Unpin` because it contains the handler future. Pin it on the stack with `core::pin::pin!`, which does not allocate:
+
+```rust,ignore
+use core::pin::pin;
+use medi_rs::stream::StreamExt;
+
+let mut users = pin!(mediator.stream(SearchUsers { query: "Ada".into() }));
+while let Some(user) = users.next().await {
+    let user = user?;
+    if user.is_admin() {
+        break; // Dropping the stream cancels the handler.
+    }
+}
+```
+
+On Tokio and Wasm, where allocation is acceptable, `Box::pin(mediator.stream(request))` (or `StreamExt::boxed` for `Send` streams) is an alternative to `pin!` when the stream must be stored or returned. Embassy and other `no_std` targets should stay with the combinators or `pin!`.
+
+### Behavior
+
+- **Lazy, inline execution.** The handler starts on the first poll and runs only while the stream is polled. No task is spawned, so `stream` needs neither `start` nor a `'static` mediator.
+- **Items.** Every item is yielded as `Ok(item)` in send order. `sender.send(item).await` waits while the route's buffer (`capacity`) is full, which gives the consumer backpressure.
+- **Errors.** If the handler returns `Err(error)`, the stream yields all previously sent items, then exactly one `Err(error)`, then ends. If it returns `Ok(())`, the stream ends after the items.
+- **Cancellation.** Dropping the stream (or stopping early, for example with `take`) drops the handler future at its current `.await`. Buffered items are discarded, and values owned by the handler are dropped normally.
+- **Static channels and concurrency.** Each stream route owns one bounded channel inside the mediator, created by `new`; opening a stream does not allocate. While one stream of a route is active, another `stream` call for the same route waits at its first poll until the active stream ends or is dropped. Streams of different routes are independent. A stream handler must therefore not consume its own route recursively.
+
+### Runtime channels
+
+The runtime feature selects the channel implementation:
+
+| Feature   | Stream channel                            |
+| --------- | ----------------------------------------- |
+| `tokio`   | `tokio::sync::mpsc`                       |
+| `wasm`    | `futures::channel::mpsc`                  |
+| `embassy` | `embassy_sync::channel::Channel` (static) |
+
+Every adapter implements the `StreamChannel` trait, the stream counterpart of `EventQueue`. On Tokio, the returned stream is `Send` and can be consumed in a spawned task.
+
 ## Events
 
 Events are plain `Clone + Send + 'static` values. List each event route in a module manifest, create a `'static` mediator, and call `start` before publishing. `start` starts workers and `#[medi_task]` tasks exactly once; later calls return `StartError::AlreadyStarted` and do not spawn additional work. Use `is_started` to inspect that state. Command-only mediators have no startup work, so `is_started` remains `false`. Each generated worker dispatches an event to every registered handler. `publish` waits when the configured bounded queue is full. Use `try_publish` when the caller must not wait: it returns `TryPublishError::Full(event)` when capacity is exhausted and `TryPublishError::Closed(event)` after shutdown or when workers are unavailable. Both errors retain the event for retry, persistence, or disposal. Handler failures never make `publish` fail and never stop the other handlers. Without `event_failure_reporter`, they are discarded for backwards compatibility. With a reporter, each failure is observed once through `EventHandlerFailure` metadata; concrete handler errors are not exposed because routes need not share an error type.
@@ -359,6 +455,7 @@ For Embassy, initialize the mediator in a `StaticCell` and call `mediator.start(
   - [Resource injection](examples/tokio/src/bin/resources.rs)
   - [Event dispatch](examples/tokio/src/bin/events.rs)
   - [Typed handler errors](examples/tokio/src/bin/custom_error.rs)
+  - [Streams](examples/tokio/src/bin/streams.rs)
 - [WebAssembly](examples/wasm/)
 - [Embassy micro:bit v2](examples/embassy-microbit-v2/)
 

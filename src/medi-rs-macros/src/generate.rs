@@ -2,6 +2,7 @@
 
 use crate::handler::decorate_handler_call;
 use crate::manifest::{ModuleManifest, handler_invoker_path};
+use crate::stream::stream_handler_invoker_path;
 use crate::task::task_invoker_path;
 use quote::{format_ident, quote};
 use syn::{Expr, Ident, Path, Type};
@@ -48,15 +49,27 @@ pub(crate) fn collect_resource_types(modules: &[ModuleManifest]) -> Vec<Type> {
         .collect()
 }
 
+/// Mediator fields initialized by the generated constructor besides resources
+/// and the event queue.
+pub(crate) struct ConstructorFields<'a> {
+    pub(crate) task_count: usize,
+    pub(crate) event_failure_reporter: Option<&'a Type>,
+    pub(crate) stream_channels: &'a proc_macro2::TokenStream,
+}
+
 pub(crate) fn generate_constructor(
     resource_types: &[Type],
     resource_names: &[Ident],
     resource_values: &proc_macro2::TokenStream,
     has_events: bool,
     capacity: &Expr,
-    task_count: usize,
-    event_failure_reporter: Option<&Type>,
+    fields: ConstructorFields<'_>,
 ) -> proc_macro2::TokenStream {
+    let ConstructorFields {
+        task_count,
+        event_failure_reporter,
+        stream_channels,
+    } = fields;
     let task_shutdown_fields = (0..task_count).map(|index| {
         let field = format_ident!("task_shutdown_{index}");
         quote! { #field: ::medi_rs::ShutdownSignal::new(), }
@@ -75,6 +88,7 @@ pub(crate) fn generate_constructor(
                     event_queue: ::medi_rs::EventQueue::new(Some(#capacity)),
                     #reporter_value
                     #(#task_shutdown_fields)*
+                    #stream_channels
                     lifecycle: ::medi_rs::Lifecycle::new(),
                 }
             }
@@ -82,7 +96,7 @@ pub(crate) fn generate_constructor(
         (true, false) => quote! {
             /// Construct a mediator with no typed resources.
             pub fn new() -> Self {
-                Self { resources: (), #(#task_shutdown_fields)* lifecycle: ::medi_rs::Lifecycle::new() }
+                Self { resources: (), #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
             }
         },
         (false, true) => quote! {
@@ -94,6 +108,7 @@ pub(crate) fn generate_constructor(
                     event_queue: ::medi_rs::EventQueue::new(Some(#capacity)),
                     #reporter_value
                     #(#task_shutdown_fields)*
+                    #stream_channels
                     lifecycle: ::medi_rs::Lifecycle::new(),
                 }
             }
@@ -101,7 +116,7 @@ pub(crate) fn generate_constructor(
         (false, false) => quote! {
             /// Construct a mediator from its declared resource values.
             pub fn new(#(#resource_names: #resource_types),*) -> Self {
-                Self { resources: #resource_values, #(#task_shutdown_fields)* lifecycle: ::medi_rs::Lifecycle::new() }
+                Self { resources: #resource_values, #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
             }
         },
     }
@@ -181,6 +196,75 @@ pub(crate) fn generate_command_routes(
             }
         }
     })).collect()
+}
+
+/// Generated fragments for mediators with stream routes.
+pub(crate) struct StreamSupport {
+    pub(crate) fields: proc_macro2::TokenStream,
+    pub(crate) initializers: proc_macro2::TokenStream,
+    pub(crate) routes: proc_macro2::TokenStream,
+    pub(crate) method: proc_macro2::TokenStream,
+}
+
+pub(crate) fn generate_stream_support(modules: &[ModuleManifest], name: &Ident) -> StreamSupport {
+    let streams: Vec<_> = modules.iter().flat_map(|module| &module.streams).collect();
+    if streams.is_empty() {
+        return StreamSupport {
+            fields: quote! {},
+            initializers: quote! {},
+            routes: quote! {},
+            method: quote! {},
+        };
+    }
+    let mut fields = Vec::new();
+    let mut initializers = Vec::new();
+    let mut routes = Vec::new();
+    for (index, stream) in streams.iter().enumerate() {
+        let request = &stream.request;
+        let field = format_ident!("stream_channel_{index}");
+        let message = quote! {
+            ::medi_rs::StreamMessage<
+                <#request as ::medi_rs::StreamRequest>::Item,
+                <#request as ::medi_rs::StreamRequest>::Error,
+            >
+        };
+        let channel_type = if cfg!(feature = "embassy") {
+            quote! { ::medi_rs::adapters::selected::StreamChannel<#message, { <#request as ::medi_rs::StreamRequest>::CAPACITY }> }
+        } else {
+            quote! { ::medi_rs::adapters::selected::StreamChannel<#message> }
+        };
+        fields.push(quote! { #field: #channel_type, });
+        initializers.push(quote! {
+            #field: ::medi_rs::StreamChannel::new(<#request as ::medi_rs::StreamRequest>::CAPACITY),
+        });
+        let invoker = stream_handler_invoker_path(&stream.handler);
+        routes.push(quote! {
+            impl ::medi_rs::StaticStream<#name> for #request {
+                fn stream(self, mediator: &#name) -> impl ::medi_rs::stream::Stream<Item = core::result::Result<Self::Item, Self::Error>> + '_ {
+                    ::medi_rs::stream::open(&mediator.#field, move |sender| #invoker(mediator, &mediator.resources, sender, self))
+                }
+            }
+        });
+    }
+    StreamSupport {
+        fields: quote! { #(#fields)* },
+        initializers: quote! { #(#initializers)* },
+        routes: quote! { #(#routes)* },
+        method: quote! {
+            /// Open the typed stream of a stream request.
+            ///
+            /// The handler runs while the returned stream is polled. Consume it
+            /// with `try_for_each`, `for_each`, or `try_collect`, which need no
+            /// pinning; a manual `next()` loop requires `core::pin::pin!`.
+            /// See `medi_rs::stream` for error and cancellation semantics.
+            pub fn stream<S>(&self, request: S) -> impl ::medi_rs::stream::Stream<Item = core::result::Result<S::Item, S::Error>> + '_
+            where
+                S: ::medi_rs::StaticStream<Self>,
+            {
+                request.stream(self)
+            }
+        },
+    }
 }
 
 fn generate_event_dispatch_arms(

@@ -60,6 +60,31 @@
 //! Enable one runtime feature for event processing: `tokio`, `wasm`, or
 //! `embassy`. The features are mutually exclusive. Command-only mediators do
 //! not need a runtime feature.
+//!
+//! # Streams
+//!
+//! A stream request derives [`MediStreamRequest`]; its
+//! [`medi_stream_handler`] pushes items through a `StreamSender` and the
+//! generated `stream` method returns them as a typed
+//! [`Stream`](stream::Stream). Stream routes use the channel of the selected
+//! runtime feature and are listed in a module's `streams` section. See the
+//! [`stream`] module for error and cancellation semantics.
+//!
+//! ```ignore
+//! use medi_rs::stream::TryStreamExt;
+//!
+//! mediator
+//!     .stream(SearchUsers { query: "Ada".into() })
+//!     .try_for_each(|user| async move {
+//!         println!("{user}");
+//!         Ok(())
+//!     })
+//!     .await?;
+//! ```
+//!
+//! Consuming combinators such as `try_for_each`, `for_each`, and `try_collect`
+//! pin the stream internally. Only a manual `next()` loop needs
+//! `core::pin::pin!`.
 
 #[cfg(test)]
 extern crate alloc;
@@ -160,6 +185,7 @@ mod bus;
 mod error;
 mod event;
 mod resource;
+pub mod stream;
 /// Internal typed-tuple primitives used by generated mediator code.
 #[doc(hidden)]
 pub mod tlist;
@@ -168,9 +194,21 @@ pub mod tlist;
 pub use adapters::lifecycle::Lifecycle;
 pub use adapters::queue::EventQueue;
 pub use adapters::shutdown::ShutdownSignal;
+pub use adapters::stream::{StreamChannel, StreamChannelReceiver, StreamChannelSender};
 pub use error::*;
+#[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
+#[doc(hidden)]
+pub use stream::StaticStream;
+#[doc(hidden)]
+pub use stream::StreamMessage;
+pub use stream::StreamRequest;
+#[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
+pub use stream::StreamSender;
 
-pub use medi_rs_macros::{__medi_rs_finalize_composition, MediCommand, medi_handler, medi_module, medi_task};
+pub use medi_rs_macros::{
+    __medi_rs_finalize_composition, MediCommand, MediStreamRequest, medi_handler, medi_module, medi_stream_handler,
+    medi_task,
+};
 
 /// Metadata about a failed asynchronous event-handler invocation.
 ///
