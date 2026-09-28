@@ -103,8 +103,19 @@ static BOARD: StaticCell<EmbassyBoard> = StaticCell::new();
 static BUTTON_A: StaticCell<AsyncMutex<CriticalSectionRawMutex, Input<'static>>> = StaticCell::new();
 static MEDIATOR: StaticCell<AppMediator> = StaticCell::new();
 
+/// A separately declared task that the startup hook starts through its injected spawner.
+#[embassy_executor::task]
+async fn startup_indicator(board: BoardApi) {
+    board.toggle_activity_led();
+    Timer::after(Duration::from_millis(100)).await;
+    board.toggle_activity_led();
+}
+
 #[medi_startup]
-fn initialize_board(_mediator: &AppMediator, _board: BoardApi) {
+fn initialize_board(_mediator: &AppMediator, spawner: medi_rs::SendSpawner, board: BoardApi) {
+    if let Ok(token) = startup_indicator(board) {
+        spawner.spawn(token);
+    }
     info!("mediator startup hook: board initialized");
 }
 
@@ -187,7 +198,7 @@ async fn display(_mediator: &AppMediator, board: BoardApi) {
 
 medi_module! {
     manifest buttons_manifest;
-    resources { BoardApi; ButtonInput; }
+    resources { medi_rs::SendSpawner; BoardApi; ButtonInput; }
     startup { initialize_board; }
     shutdown { release_board; }
     tasks { button_monitor; display; }
@@ -213,7 +224,7 @@ async fn main(spawner: Spawner) {
         Output::new(p.P0_21, Level::Low, OutputDrive::Standard),
         &OBSERVED_COUNT,
     ));
-    let mediator = MEDIATOR.init(AppMediator::new(board, button));
+    let mediator = MEDIATOR.init(AppMediator::new(spawner.make_send(), board, button));
     mediator.start(spawner).expect("mediator must start");
 
     info!("medi-rs Embassy micro:bit v2 example started");

@@ -94,6 +94,14 @@ extern crate alloc;
 #[doc(hidden)]
 pub use embassy_executor;
 
+/// Thread-safe Embassy task spawner.
+///
+/// Register this as a mediator resource when handlers or runtime tasks need
+/// to spawn additional `Send` Embassy tasks. Create it with
+/// [`embassy_executor::Spawner::make_send`].
+#[cfg(feature = "embassy")]
+pub use embassy_executor::SendSpawner;
+
 /// Compose module-owned mediator manifests into one application mediator.
 ///
 /// Each manifest is declared by [`medi_rs_macros::medi_module!`]. The explicit

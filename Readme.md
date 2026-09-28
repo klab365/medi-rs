@@ -320,6 +320,22 @@ Use `Option<T>` in `resources { ... }` only when a dependency is optional for th
 
 With a runtime feature, `#[medi_task]` creates a task with the same typed resource injection as a handler. It may take `&AppMediator` as its first parameter when it needs mediator access. It may then take `&ShutdownSignal`; this is injected by the mediator and is cancelled by `mediator.shutdown()`. Remaining value parameters are declared resources. Register it in a `tasks` section. `mediator.start(spawner)` starts tasks on Embassy; `mediator.start()` does so on Tokio and Wasm.
 
+On Embassy, a handler, task, or lifecycle hook can start additional statically declared `Send` Embassy tasks by declaring `medi_rs::SendSpawner` as a resource and passing `spawner.make_send()` from `main` to the mediator constructor. Pass the original `Spawner` to `start` as usual. The Embassy micro:bit example uses this from its startup hook:
+
+```rust,ignore
+#[embassy_executor::task]
+async fn warm_up_board(board: BoardApi) {
+    // ...
+}
+
+#[medi_startup]
+fn initialize_board(spawner: medi_rs::SendSpawner, board: BoardApi) {
+    if let Ok(token) = warm_up_board(board) {
+        spawner.spawn(token);
+    }
+}
+```
+
 ```rust,ignore
 #[medi_task]
 async fn watch_button(mediator: &AppMediator, signal: &ShutdownSignal, board: BoardApi) {
