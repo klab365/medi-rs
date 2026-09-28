@@ -10,7 +10,7 @@ use std::{
 };
 
 use futures::{pin_mut, poll};
-use medi_rs::{StartError, medi_handler, medi_module, medi_task, mediator};
+use medi_rs::{SendSpawner, StartError, medi_handler, medi_module, medi_task, mediator};
 
 #[derive(Clone)]
 struct EventObserved(u32);
@@ -20,6 +20,8 @@ struct TaskState(&'static AtomicU32);
 
 static OBSERVED_VALUE: AtomicU32 = AtomicU32::new(0);
 static TASK_STARTED: AtomicU32 = AtomicU32::new(0);
+static SPAWNER_INJECTED: AtomicU32 = AtomicU32::new(0);
+static SPAWNED_WITH_RESOURCE: AtomicU32 = AtomicU32::new(0);
 
 #[medi_handler]
 async fn observe_event(event: EventObserved) -> medi_rs::Result<()> {
@@ -32,11 +34,24 @@ async fn initialize_board(_mediator: &EmbassyTestMediator, state: TaskState) {
     state.0.store(1, Ordering::Release);
 }
 
+#[embassy_executor::task]
+async fn spawned_with_resource() {
+    SPAWNED_WITH_RESOURCE.store(1, Ordering::Release);
+}
+
+#[medi_task]
+async fn receives_spawner(spawner: SendSpawner) {
+    SPAWNER_INJECTED.store(1, Ordering::Release);
+    if let Ok(token) = spawned_with_resource() {
+        spawner.spawn(token);
+    }
+}
+
 medi_module! {
     manifest embassy_manifest;
-    resources { TaskState; }
+    resources { TaskState; SendSpawner; }
     events { EventObserved => [observe_event]; }
-    tasks { initialize_board; }
+    tasks { initialize_board; receives_spawner; }
 }
 
 mediator! {
@@ -49,14 +64,28 @@ mediator! {
 
 #[test]
 fn embassy_queue_honors_the_generated_capacity() {
-    let mediator = EmbassyTestMediator::new(TaskState(&TASK_STARTED));
+    let (checked_tx, checked_rx) = mpsc::sync_channel(1);
 
-    futures::executor::block_on(mediator.publish(EventObserved(1))).expect("first event must fit");
-    futures::executor::block_on(async {
-        let publish = mediator.publish(EventObserved(2));
-        pin_mut!(publish);
-        assert!(poll!(publish).is_pending());
+    thread::spawn(move || {
+        let executor = Box::leak(Box::new(embassy_executor::Executor::new()));
+        executor.run(|spawner| {
+            let mediator = Box::leak(Box::new(EmbassyTestMediator::new(
+                TaskState(&TASK_STARTED),
+                spawner.make_send(),
+            )));
+            futures::executor::block_on(mediator.publish(EventObserved(1))).expect("first event must fit");
+            futures::executor::block_on(async {
+                let publish = mediator.publish(EventObserved(2));
+                pin_mut!(publish);
+                assert!(poll!(publish).is_pending());
+            });
+            checked_tx.send(()).expect("test must receive capacity check");
+        });
     });
+
+    checked_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("Embassy executor must check queue capacity");
 }
 
 #[test]
@@ -65,10 +94,12 @@ fn embassy_worker_dispatches_published_events() {
 
     thread::spawn(move || {
         let executor = Box::leak(Box::new(embassy_executor::Executor::new()));
-        let mediator = Box::leak(Box::new(EmbassyTestMediator::new(TaskState(&TASK_STARTED))));
-        let mediator_for_test: &'static EmbassyTestMediator = mediator;
-
         executor.run(|spawner| {
+            let mediator = Box::leak(Box::new(EmbassyTestMediator::new(
+                TaskState(&TASK_STARTED),
+                spawner.make_send(),
+            )));
+            let mediator_for_test: &'static EmbassyTestMediator = mediator;
             assert!(!mediator.is_started());
             mediator.start(spawner).expect("mediator must start");
             assert!(mediator.is_started());
@@ -83,7 +114,11 @@ fn embassy_worker_dispatches_published_events() {
     futures::executor::block_on(mediator.publish(EventObserved(42))).expect("event must be queued");
 
     let deadline = Instant::now() + Duration::from_secs(1);
-    while OBSERVED_VALUE.load(Ordering::Acquire) != 42 || TASK_STARTED.load(Ordering::Acquire) != 1 {
+    while OBSERVED_VALUE.load(Ordering::Acquire) != 42
+        || TASK_STARTED.load(Ordering::Acquire) != 1
+        || SPAWNER_INJECTED.load(Ordering::Acquire) != 1
+        || SPAWNED_WITH_RESOURCE.load(Ordering::Acquire) != 1
+    {
         assert!(Instant::now() < deadline, "event worker or Embassy task did not run");
         thread::sleep(Duration::from_millis(1));
     }
