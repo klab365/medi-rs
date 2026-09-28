@@ -5,6 +5,9 @@ pr_branch_prefix = "release-plz-"
 pr_labels = ["release"]
 git_release_enable = true
 git_release_generate_notes = true
+# cargo-semver-checks enables every optional runtime feature, but medi-rs
+# deliberately makes `tokio`, `wasm`, and `embassy` mutually exclusive.
+semver_check = false
 
 [[package]]
 name = "medi-rs"
