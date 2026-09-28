@@ -1,0 +1,17 @@
+[workspace]
+# Release-plz prepares, tags, creates GitHub releases, and publishes workspace
+# crates. The crates are versioned together through the shared workspace version.
+pr_branch_prefix = "release-plz-"
+pr_labels = ["release"]
+git_release_enable = true
+git_release_generate_notes = true
+
+[[package]]
+name = "medi-rs"
+version_group = "medi-rs"
+changelog_path = "Changelog.md"
+
+[[package]]
+name = "medi-rs-macros"
+version_group = "medi-rs"
+changelog_update = false

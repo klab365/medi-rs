@@ -2,6 +2,21 @@
 
 Versions are stored in workspace package metadata in `Cargo.toml` and shared by both crates.
 
+## Release preparation
+
+[Release-plz](https://release-plz.dev/) runs after every push to `main` and
+creates or updates a `release-plz-*` pull request. It determines the next
+workspace version, updates `Cargo.toml` and `Cargo.lock`, and adds the
+conventional-commit release notes to `Changelog.md`. When that pull request is
+merged, Release-plz publishes `medi-rs-macros` and then `medi-rs`, creates
+crate-specific tags (for example `medi-rs-v2.5.0`), and creates GitHub
+releases.
+
+Repository Actions settings must allow workflows to create pull requests (`Read
+and write permissions` and `Allow GitHub Actions to create and approve pull
+requests`). The `CRATESIO_TOKEN` repository secret must contain a token that
+can publish both workspace crates.
+
 ## Publish command
 
 Set the release version in `Cargo.toml` before creating its tag. The workspace version and the `medi-rs-macros` dependency version must agree.
@@ -24,15 +39,9 @@ already published:
 mise run verify-release -- 1.0.1
 ```
 
-## Current CD workflow
-
-`.github/workflows/cd.yml` publishes when a tag matching `v*.*.*` is pushed. It requires the tag version to match every workspace package and fails if any workspace package version already exists on crates.io.
-
-Use lowercase `v` tags, for example `v1.0.1`.
-
 ## Pre-release checklist
 
-1. Update the version in `Cargo.toml` and the changelog.
+1. Merge the Release-plz pull request that updates the version and changelog.
 2. Run local checks:
 
    ```sh
@@ -44,6 +53,6 @@ Use lowercase `v` tags, for example `v1.0.1`.
    mise run check-docs
    ```
 
-3. Run `mise run verify-release -- <version>` and a publish dry run.
-4. Push the release tag.
-5. Verify both crates on crates.io.
+3. Optionally run `mise run verify-release -- <version>` and a publish dry run.
+4. Verify both crates and the generated GitHub releases after Release-plz
+   publishes them.
