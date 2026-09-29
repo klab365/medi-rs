@@ -70,6 +70,25 @@ pub fn medi_stream_handler_inner(attribute: TokenStream, input: TokenStream) -> 
     }
 
     let function = parse_macro_input!(input as ItemFn);
+    if function.sig.asyncness.is_none() {
+        return syn::Error::new_spanned(
+            function.sig.fn_token,
+            "`#[medi_stream_handler]` can only be applied to an `async fn`",
+        )
+        .into_compile_error()
+        .into();
+    }
+    if let Some(receiver) = function.sig.inputs.iter().find_map(|argument| match argument {
+        syn::FnArg::Receiver(receiver) => Some(receiver),
+        syn::FnArg::Typed(_) => None,
+    }) {
+        return syn::Error::new_spanned(
+            receiver,
+            "`#[medi_stream_handler]` functions cannot have a `self` receiver; use a resource parameter instead",
+        )
+        .into_compile_error()
+        .into();
+    }
     let name = &function.sig.ident;
     let helper = format_ident!("__medi_stream_handler_{name}");
     let mut arguments = typed_arguments(&function);

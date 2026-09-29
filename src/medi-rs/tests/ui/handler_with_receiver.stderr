@@ -1,0 +1,5 @@
+error: `#[medi_handler]` functions cannot have a `self` receiver; use a resource parameter instead
+ --> tests/ui/handler_with_receiver.rs:7:21
+  |
+7 |     async fn handle(&self, _: ()) {}
+  |                     ^^^^^

@@ -4,6 +4,7 @@
 
 ## Documentation
 
+- [Quick start](docs/quickstart.md) — build a command mediator with an injected resource.
 - [Architecture](docs/architecture.md)
 - [Development](docs/development.md)
 - [Release process](docs/release.md)
