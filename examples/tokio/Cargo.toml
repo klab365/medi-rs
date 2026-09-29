@@ -8,5 +8,5 @@ publish = false
 
 [dependencies]
 medi-rs = { path = "../../src/medi-rs", default-features = false, features = ["tokio"] }
-thiserror = "1.0.64"
+thiserror = "2.0.21"
 tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
