@@ -155,7 +155,10 @@ jobs:
       - name: Generate code coverage
         run: mise coverage
 
+      # Dependabot pull requests cannot access repository secrets. Their Rust
+      # build, lint, and test jobs still run; skip only the token-authenticated scan.
       - name: SonarQube Scan
+        if: github.actor != 'dependabot[bot]'
         uses: SonarSource/sonarqube-scan-action@7006c4492b2e0ee0f816d36501671557c97f5995 # v8.1.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
