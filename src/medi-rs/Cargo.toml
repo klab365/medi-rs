@@ -38,6 +38,6 @@ embassy-executor = { version = "0.10", features = ["platform-std", "executor-thr
 futures = { version = "0.3.31", features = ["executor"] }
 async-trait = "0.1.88"
 rand = "0.8.5"
-thiserror = "1.0.64"
+thiserror = "2.0.21"
 trybuild = "1.0.101"
 tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "sync", "time"] }
