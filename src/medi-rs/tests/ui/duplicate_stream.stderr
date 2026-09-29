@@ -13,3 +13,19 @@ error: duplicate stream registration for `SearchUsers`
    | |_- in this macro invocation
    |
    = note: this error originates in the macro `second_manifest` which comes from the expansion of the macro `mediator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: first stream registration for `SearchUsers` is here
+  --> tests/ui/duplicate_stream.rs:8:19
+   |
+ 8 |           streams { SearchUsers => search_users; }
+   |                     ^^^^^^^^^^^
+...
+24 | / mediator! {
+25 | |     pub struct AppMediator {
+26 | |         event_queue_capacity: 16;
+27 | |         event_workers: 1;
+...  |
+30 | | }
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `first_manifest` which comes from the expansion of the macro `mediator` (in Nightly builds, run with -Z macro-backtrace for more info)

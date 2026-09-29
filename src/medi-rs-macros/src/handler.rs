@@ -65,6 +65,12 @@ impl<'a> InjectedParameters<'a> {
     /// handlers, its sender) into an optional mediator context and resources.
     pub(crate) fn parse(arguments: Vec<&'a Type>) -> SynResult<Self> {
         let (context, resources): (Option<&Type>, Vec<&Type>) = match arguments.first() {
+            Some(Type::Reference(reference)) if reference.mutability.is_some() => {
+                return Err(syn::Error::new_spanned(
+                    reference,
+                    "a mutable mediator reference is not supported; use `&AppMediator`",
+                ));
+            }
             Some(Type::Reference(reference)) => (Some(reference.elem.as_ref()), arguments[1..].to_vec()),
             _ => (None, arguments),
         };
@@ -163,6 +169,25 @@ pub fn medi_handler_inner(
         Err(error) => return error.into_compile_error().into(),
     };
     let function = parse_macro_input!(input as ItemFn);
+    if function.sig.asyncness.is_none() {
+        return syn::Error::new_spanned(
+            function.sig.fn_token,
+            "`#[medi_handler]` can only be applied to an `async fn`",
+        )
+        .into_compile_error()
+        .into();
+    }
+    if let Some(receiver) = function.sig.inputs.iter().find_map(|argument| match argument {
+        FnArg::Receiver(receiver) => Some(receiver),
+        FnArg::Typed(_) => None,
+    }) {
+        return syn::Error::new_spanned(
+            receiver,
+            "`#[medi_handler]` functions cannot have a `self` receiver; use a resource parameter instead",
+        )
+        .into_compile_error()
+        .into();
+    }
     let name = &function.sig.ident;
     let helper = format_ident!("__medi_handler_{name}");
     let mut arguments = typed_arguments(&function);

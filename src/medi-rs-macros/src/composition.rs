@@ -146,29 +146,41 @@ fn validate_unique_registrations(modules: &[ModuleManifest]) -> SynResult<()> {
         for stream in &module.streams {
             let request = &stream.request;
             let key = quote!(#request).to_string();
-            if streams.insert(key.clone(), request.span()).is_some() {
+            if let Some(first_span) = streams.insert(key.clone(), request.span()) {
                 combine_error(
                     &mut errors,
                     syn::Error::new(request.span(), format!("duplicate stream registration for `{key}`")),
+                );
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(first_span, format!("first stream registration for `{key}` is here")),
                 );
             }
         }
         for command in &module.commands {
             let request = &command.request;
             let key = quote!(#request).to_string();
-            if registrations.insert(key.clone(), request.span()).is_some() {
+            if let Some(first_span) = registrations.insert(key.clone(), request.span()) {
                 combine_error(
                     &mut errors,
                     syn::Error::new(request.span(), format!("duplicate command registration for `{key}`")),
+                );
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(first_span, format!("first command registration for `{key}` is here")),
                 );
             }
         }
         for resource in &module.resources {
             let key = quote!(#resource).to_string();
-            if resources.insert(key.clone(), resource.span()).is_some() {
+            if let Some(first_span) = resources.insert(key.clone(), resource.span()) {
                 combine_error(
                     &mut errors,
                     syn::Error::new(resource.span(), format!("duplicate resource registration for `{key}`")),
+                );
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(first_span, format!("first resource registration for `{key}` is here")),
                 );
             }
         }

@@ -1,0 +1,5 @@
+error: `#[medi_handler]` can only be applied to an `async fn`
+ --> tests/ui/non_async_handler.rs:4:1
+  |
+4 | fn not_async(_: ()) {}
+  | ^^
