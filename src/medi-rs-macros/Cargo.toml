@@ -19,7 +19,7 @@ embassy = []
 [dependencies]
 proc-macro2 = "1.0.95"
 quote = "1.0.40"
-syn = { version = "2.0.101", features = ["full"] }
+syn = { version = "3.0.3", features = ["full"] }
 
 [lints]
 workspace = true
