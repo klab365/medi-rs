@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # The workspace manifest covers both library crates.
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Each runnable example is an independent Cargo workspace with its own lockfile.
+  - package-ecosystem: cargo
+    directory: "/examples/tokio"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: cargo
+    directory: "/examples/wasm"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: cargo
+    directory: "/examples/embassy-microbit-v2"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
