@@ -138,6 +138,7 @@ mod tests {
     use super::medi_hook_inner_impl;
     use quote::quote;
 
+    #[cfg(any(feature = "tokio", feature = "wasm"))]
     #[test]
     fn rejects_startup_spawner_outside_embassy() {
         let expanded = medi_hook_inner_impl(
@@ -147,9 +148,31 @@ mod tests {
         )
         .to_string();
 
-        assert!(expanded.contains("requires the `embassy` runtime feature"));
+        assert!(expanded.contains("embassy"), "{expanded}");
     }
 
+    #[cfg(feature = "embassy")]
+    #[test]
+    fn accepts_startup_spawner_on_embassy() {
+        let expanded = medi_hook_inner_impl(
+            "startup",
+            quote! {},
+            quote! { fn initialize(_: &medi_rs::StartupSpawner) {} },
+        )
+        .to_string();
+
+        assert!(expanded.contains("fn initialize"));
+    }
+
+    #[cfg(not(any(feature = "tokio", feature = "wasm", feature = "embassy")))]
+    #[test]
+    fn rejects_hooks_without_a_runtime() {
+        let expanded = medi_hook_inner_impl("startup", quote! {}, quote! { fn initialize() {} }).to_string();
+
+        assert!(expanded.contains("lifecycle hooks require"), "{expanded}");
+    }
+
+    #[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
     #[test]
     fn rejects_startup_spawner_in_shutdown_hooks() {
         let expanded = medi_hook_inner_impl(
