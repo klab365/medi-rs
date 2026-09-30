@@ -155,7 +155,7 @@ use numbers::numbers_manifest;
 
 medi_module! {
     manifest users_manifest;
-    resources { UserDirectory; Prefix; Probe; }
+    resources { user_directory: UserDirectory; prefix: Prefix; probe: Probe; }
     commands { CountUsers => count_users; }
     streams {
         SearchUsers => search_users;
@@ -174,13 +174,13 @@ mediator! {
 }
 
 fn mediator(probe: Probe) -> StreamMediator {
-    StreamMediator::new(
-        UserDirectory {
+    StreamMediator::builder()
+        .user_directory(UserDirectory {
             users: vec!["Ada Lovelace", "Alan Turing", "Ada Yonath", "Grace Hopper"],
-        },
-        Prefix("user:"),
-        probe,
-    )
+        })
+        .prefix(Prefix("user:"))
+        .probe(probe)
+        .build()
 }
 
 #[test]
@@ -395,7 +395,7 @@ mod tokio_runtime {
 
     #[tokio::test]
     async fn tokio_stream_is_send_and_can_be_consumed_in_a_spawned_task() {
-        let mediator: &'static TickMediator = Box::leak(Box::new(TickMediator::new()));
+        let mediator: &'static TickMediator = Box::leak(Box::new(TickMediator::builder().build()));
 
         let stream = mediator.stream(Ticks(3));
         let ticks = tokio::spawn(async move { stream.collect::<Vec<_>>().await })
@@ -442,7 +442,7 @@ mod embassy_runtime {
 
         thread::spawn(move || {
             let executor = Box::leak(Box::new(embassy_executor::Executor::new()));
-            let mediator: &'static SampleMediator = Box::leak(Box::new(SampleMediator::new()));
+            let mediator: &'static SampleMediator = Box::leak(Box::new(SampleMediator::builder().build()));
             executor.run(|spawner| spawner.spawn(consume(mediator, results_tx).unwrap()));
         });
 

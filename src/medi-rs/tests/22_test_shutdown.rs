@@ -21,7 +21,7 @@ async fn count(count: Count, _: Event) -> Result<()> {
 
 medi_module! {
     manifest shutdown_manifest;
-    resources { Count; }
+    resources { count: Count; }
     events { Event => [count]; }
 }
 
@@ -36,7 +36,7 @@ mediator! {
 #[tokio::test]
 async fn shutdown_drains_events_and_rejects_new_publishes() {
     let count = Count(Arc::new(AtomicUsize::new(0)));
-    let mediator = Box::leak(Box::new(ShutdownMediator::new(count.clone())));
+    let mediator = Box::leak(Box::new(ShutdownMediator::builder().count(count.clone()).build()));
     mediator.start().expect("mediator must start");
 
     for _ in 0..8 {
@@ -57,7 +57,11 @@ async fn shutdown_drains_events_and_rejects_new_publishes() {
 
 #[tokio::test]
 async fn shutdown_without_events_completes() {
-    let mediator = Box::leak(Box::new(ShutdownMediator::new(Count(Arc::new(AtomicUsize::new(0))))));
+    let mediator = Box::leak(Box::new(
+        ShutdownMediator::builder()
+            .count(Count(Arc::new(AtomicUsize::new(0))))
+            .build(),
+    ));
     mediator.start().expect("mediator must start");
     mediator.shutdown().await.unwrap();
 }

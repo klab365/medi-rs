@@ -2,9 +2,9 @@
 
 use crate::generate::{
     ConstructorFields, EventDispatchConfig, LifecycleHookCalls, collect_event_routes, collect_hooks,
-    collect_resource_types, collect_tasks, generate_command_routes, generate_composition_description,
-    generate_constructor, generate_event_support, generate_hook_calls, generate_stream_support,
-    generate_task_only_start, generate_task_spawns, generate_task_workers,
+    collect_resource_names, collect_resource_types, collect_tasks, generate_builder, generate_command_routes,
+    generate_composition_description, generate_constructor, generate_event_support, generate_hook_calls,
+    generate_stream_support, generate_task_only_start, generate_task_spawns, generate_task_workers,
 };
 use crate::manifest::ModuleManifest;
 use quote::{format_ident, quote};
@@ -140,7 +140,9 @@ fn combine_error(errors: &mut Option<syn::Error>, error: syn::Error) {
 fn validate_unique_registrations(modules: &[ModuleManifest]) -> SynResult<()> {
     let mut registrations = std::collections::HashMap::new();
     let mut resources = std::collections::HashMap::new();
+    let mut builder_methods = std::collections::HashMap::new();
     let mut streams = std::collections::HashMap::new();
+    let mut resource_index = 0;
     let mut errors = None;
     for module in modules {
         for stream in &module.streams {
@@ -172,17 +174,36 @@ fn validate_unique_registrations(modules: &[ModuleManifest]) -> SynResult<()> {
             }
         }
         for resource in &module.resources {
-            let key = quote!(#resource).to_string();
-            if let Some(first_span) = resources.insert(key.clone(), resource.span()) {
+            let resource_type = &resource.resource_type;
+            let key = quote!(#resource_type).to_string();
+            if let Some(first_span) = resources.insert(key.clone(), resource_type.span()) {
                 combine_error(
                     &mut errors,
-                    syn::Error::new(resource.span(), format!("duplicate resource registration for `{key}`")),
+                    syn::Error::new(
+                        resource_type.span(),
+                        format!("duplicate resource registration for `{key}`"),
+                    ),
                 );
                 combine_error(
                     &mut errors,
                     syn::Error::new(first_span, format!("first resource registration for `{key}` is here")),
                 );
             }
+            let method = resource
+                .name
+                .clone()
+                .unwrap_or_else(|| format_ident!("resource_{resource_index}"));
+            if let Some(first_span) = builder_methods.insert(method.to_string(), method.span()) {
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(method.span(), format!("duplicate builder resource name `{method}`")),
+                );
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(first_span, format!("first builder resource name `{method}` is here")),
+                );
+            }
+            resource_index += 1;
         }
     }
     errors.map_or(Ok(()), Err)
@@ -216,6 +237,7 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     }
     let stream_support = generate_stream_support(&input.modules, &input.name);
     let resource_types = collect_resource_types(&input.modules);
+    let builder_resource_names = collect_resource_names(&input.modules);
     let resource_tuple = nested_tuple_type(&resource_types);
     let resource_names: Vec<_> = (0..resource_types.len())
         .map(|index| format_ident!("resource_{index}"))
@@ -297,6 +319,7 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     });
     let vis = input.vis;
     let name = input.name;
+    let builder = generate_builder(&name, &vis, &resource_types, &builder_resource_names);
     let capacity = input.event_queue_capacity;
     let workers = input.event_workers;
     let count = input.count;
@@ -307,6 +330,7 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     quote! {
         #event_job
         #vis struct #name { resources: #resource_tuple, #event_field #reporter_field #(#task_shutdown_fields)* #stream_fields lifecycle: ::medi_rs::Lifecycle }
+        #builder
         impl #name {
             #constructor
             /// Configured capacity for the generated event queue.

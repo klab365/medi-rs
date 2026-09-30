@@ -15,7 +15,7 @@ async fn count_ticks(_mediator: &TaskMediator, ticks: TickCount) {
 
 medi_module! {
     manifest task_manifest;
-    resources { TickCount; }
+    resources { ticks: TickCount; }
     tasks { count_ticks; }
 }
 
@@ -30,7 +30,7 @@ mediator! {
 #[tokio::main]
 async fn main() {
     let ticks = TickCount(Arc::new(AtomicU32::new(0)));
-    let mediator = Box::leak(Box::new(TaskMediator::new(ticks.clone())));
+    let mediator = Box::leak(Box::new(TaskMediator::builder().ticks(ticks.clone()).build()));
     mediator.start().expect("mediator must start");
 
     sleep(Duration::from_millis(50)).await;

@@ -53,7 +53,7 @@ mediator! {
 #[tokio::test]
 async fn decorators_wrap_event_handlers() {
     CALLS.lock().unwrap().clear();
-    let mediator = Box::leak(Box::new(EventDecoratorMediator::new()));
+    let mediator = Box::leak(Box::new(EventDecoratorMediator::builder().build()));
     mediator.start().expect("mediator must start");
 
     let completed = COMPLETION.notified();

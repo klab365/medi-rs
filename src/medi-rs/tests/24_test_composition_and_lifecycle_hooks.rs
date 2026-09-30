@@ -50,7 +50,7 @@ async fn inspect_command(_: InspectCommand) -> Result<(), core::convert::Infalli
 
 medi_module! {
     manifest lifecycle_manifest;
-    resources { HookState; }
+    resources { hook_state: HookState; }
     commands { InspectCommand => inspect_command; }
     startup { initialize; }
     shutdown { cleanup; }
@@ -75,7 +75,9 @@ async fn composition_is_static_and_describes_routes() {
     assert_eq!(description.routes[0].message_name, "InspectCommand");
     assert_eq!(description.routes[0].handler_names, ["inspect_command"]);
 
-    LifecycleMediator::new(HookState(&HOOK_STATE))
+    LifecycleMediator::builder()
+        .hook_state(HookState(&HOOK_STATE))
+        .build()
         .send(InspectCommand)
         .await
         .unwrap();
@@ -84,7 +86,9 @@ async fn composition_is_static_and_describes_routes() {
 #[tokio::test]
 async fn lifecycle_hooks_run_once_in_startup_then_shutdown_order() {
     HOOK_STATE.store(0, Ordering::Release);
-    let mediator = Box::leak(Box::new(LifecycleMediator::new(HookState(&HOOK_STATE))));
+    let mediator = Box::leak(Box::new(
+        LifecycleMediator::builder().hook_state(HookState(&HOOK_STATE)).build(),
+    ));
 
     mediator.start().unwrap();
     assert_eq!(HOOK_STATE.load(Ordering::Acquire), 1);
@@ -94,7 +98,7 @@ async fn lifecycle_hooks_run_once_in_startup_then_shutdown_order() {
 
 #[test]
 fn startup_hook_errors_are_returned_from_start() {
-    let mediator = Box::leak(Box::new(FailingStartupMediator::new()));
+    let mediator = Box::leak(Box::new(FailingStartupMediator::builder().build()));
 
     assert_eq!(
         mediator.start(),

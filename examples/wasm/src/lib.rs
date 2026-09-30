@@ -172,7 +172,7 @@ fn mediator() -> &'static WasmMediator {
             return mediator;
         }
 
-        let mediator = Box::leak(Box::new(WasmMediator::new()));
+        let mediator = Box::leak(Box::new(WasmMediator::builder().build()));
         mediator.start().expect("mediator must start");
         *cell.borrow_mut() = Some(mediator);
         mediator

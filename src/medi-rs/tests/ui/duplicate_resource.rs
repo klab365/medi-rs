@@ -5,7 +5,7 @@ mod first {
 
     medi_module! {
         manifest first_manifest;
-        resources { Database; }
+        resources { database: Database; }
     }
 }
 
@@ -14,7 +14,7 @@ mod second {
 
     medi_module! {
         manifest second_manifest;
-        resources { Database; }
+        resources { database: Database; }
     }
 }
 

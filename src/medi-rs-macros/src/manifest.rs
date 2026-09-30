@@ -14,11 +14,16 @@ pub(crate) struct EventManifest {
     pub(crate) handlers: Vec<syn::Path>,
 }
 
+pub(crate) struct ResourceManifest {
+    pub(crate) name: Option<Ident>,
+    pub(crate) resource_type: Type,
+}
+
 pub(crate) struct ModuleManifest {
     pub(crate) commands: Vec<CommandManifest>,
     pub(crate) streams: Vec<CommandManifest>,
     pub(crate) events: Vec<EventManifest>,
-    pub(crate) resources: Vec<Type>,
+    pub(crate) resources: Vec<ResourceManifest>,
     pub(crate) tasks: Vec<syn::Path>,
     pub(crate) startup: Vec<syn::Path>,
     pub(crate) shutdown: Vec<syn::Path>,
@@ -133,10 +138,21 @@ fn parse_tasks(body: ParseStream<'_>) -> SynResult<Vec<syn::Path>> {
     Ok(tasks)
 }
 
-fn parse_resources(body: ParseStream<'_>) -> SynResult<Vec<Type>> {
+fn parse_resources(body: ParseStream<'_>) -> SynResult<Vec<ResourceManifest>> {
     let mut resources = Vec::new();
     while !body.is_empty() {
-        resources.push(body.parse()?);
+        let name: Ident = body.parse()?;
+        if !body.peek(Token![:]) {
+            return Err(syn::Error::new(
+                name.span(),
+                "resource declarations must use `name: Type`",
+            ));
+        }
+        body.parse::<Token![:]>()?;
+        resources.push(ResourceManifest {
+            name: Some(name),
+            resource_type: body.parse()?,
+        });
         if !body.is_empty() {
             body.parse::<Token![;]>()?;
         }
@@ -196,7 +212,12 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
         quote! { #event_type => [#(#handlers),*]; }
     });
     let resources = input.module.resources.into_iter().map(|resource| {
-        quote! { #resource; }
+        let resource_type = resource.resource_type;
+        if let Some(name) = resource.name {
+            quote! { #name: #resource_type; }
+        } else {
+            quote! { #resource_type; }
+        }
     });
     let tasks: Vec<_> = input.module.tasks.into_iter().map(|task| quote! { #task; }).collect();
     let startup: Vec<_> = input.module.startup.into_iter().map(|hook| quote! { #hook; }).collect();

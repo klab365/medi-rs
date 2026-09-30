@@ -44,7 +44,8 @@ mediator! {
 
 #[tokio::test]
 async fn send_call_second_req_test() {
-    UserMediator::new()
+    UserMediator::builder()
+        .build()
         .send(CreateUser { name: "hello".into() })
         .await
         .unwrap();

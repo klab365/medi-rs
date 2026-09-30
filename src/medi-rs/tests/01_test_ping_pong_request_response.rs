@@ -30,21 +30,21 @@ mediator! {
 
 #[tokio::test]
 async fn send_should_return_correct_pong() {
-    let mediator = PingMediator::new();
+    let mediator = PingMediator::builder().build();
     let pong = mediator.send(Ping("Ping".into())).await.unwrap();
     assert_eq!(pong.0, "Pong: Ping");
 }
 
 #[tokio::test]
 async fn send_should_return_correct_multiple_pong_without_multithreading() {
-    let mediator = PingMediator::new();
+    let mediator = PingMediator::builder().build();
     assert_eq!(mediator.send(Ping("Ping".into())).await.unwrap().0, "Pong: Ping");
     assert_eq!(mediator.send(Ping("Ping2".into())).await.unwrap().0, "Pong: Ping2");
 }
 
 #[tokio::test]
 async fn send_should_return_correct_return_values_when_multithreading() {
-    let mediator = Arc::new(PingMediator::new());
+    let mediator = Arc::new(PingMediator::builder().build());
     let mut handlers = vec![];
     for i in 0..100 {
         let mediator = Arc::clone(&mediator);

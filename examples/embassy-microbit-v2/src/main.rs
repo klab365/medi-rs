@@ -198,7 +198,7 @@ async fn display(_mediator: &AppMediator, board: BoardApi) {
 
 medi_module! {
     manifest buttons_manifest;
-    resources { BoardApi; ButtonInput; }
+    resources { board: BoardApi; button: ButtonInput; }
     startup { initialize_board; }
     shutdown { release_board; }
     tasks { button_monitor; display; }
@@ -224,7 +224,7 @@ async fn main(spawner: Spawner) {
         Output::new(p.P0_21, Level::Low, OutputDrive::Standard),
         &OBSERVED_COUNT,
     ));
-    let mediator = MEDIATOR.init(AppMediator::new(board, button));
+    let mediator = MEDIATOR.init(AppMediator::builder().board(board).button(button).build());
     mediator.start(spawner).expect("mediator must start");
 
     info!("medi-rs Embassy micro:bit v2 example started");

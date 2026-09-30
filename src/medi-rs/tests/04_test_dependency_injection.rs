@@ -46,8 +46,8 @@ async fn create_user_generic(state: AppStateGeneric<InMemoryUserRepository>, req
     state.user_repository.save(User { name: req.name })
 }
 
-medi_module! { manifest dyn_manifest; resources { AppStateDyn; } commands { CreateUser => create_user_dyn; } }
-medi_module! { manifest generic_manifest; resources { AppStateGeneric<InMemoryUserRepository>; } commands { CreateUser => create_user_generic; } }
+medi_module! { manifest dyn_manifest; resources { app_state: AppStateDyn; } commands { CreateUser => create_user_dyn; } }
+medi_module! { manifest generic_manifest; resources { app_state: AppStateGeneric<InMemoryUserRepository>; } commands { CreateUser => create_user_generic; } }
 
 mediator! { pub struct DynMediator { event_queue_capacity: 1; event_workers: 1; modules: [dyn_manifest]; } }
 mediator! { pub struct GenericMediator { event_queue_capacity: 1; event_workers: 1; modules: [generic_manifest]; } }
@@ -55,9 +55,11 @@ mediator! { pub struct GenericMediator { event_queue_capacity: 1; event_workers:
 #[tokio::test]
 async fn send_should_work_with_dependencyinjection() {
     let repo = Arc::new(InMemoryUserRepository::new());
-    let mediator = DynMediator::new(AppStateDyn {
-        user_repository: repo.clone(),
-    });
+    let mediator = DynMediator::builder()
+        .app_state(AppStateDyn {
+            user_repository: repo.clone(),
+        })
+        .build();
     mediator.send(CreateUser { name: "John".into() }).await.unwrap();
     assert_eq!(repo.0.lock().unwrap()[0].name, "John");
 }
@@ -65,9 +67,11 @@ async fn send_should_work_with_dependencyinjection() {
 #[tokio::test]
 async fn send_should_work_with_generic_dependencyinjection() {
     let repo = Arc::new(InMemoryUserRepository::new());
-    let mediator = GenericMediator::new(AppStateGeneric {
-        user_repository: repo.clone(),
-    });
+    let mediator = GenericMediator::builder()
+        .app_state(AppStateGeneric {
+            user_repository: repo.clone(),
+        })
+        .build();
     mediator.send(CreateUser { name: "John".into() }).await.unwrap();
     assert_eq!(repo.0.lock().unwrap()[0].name, "John");
 }

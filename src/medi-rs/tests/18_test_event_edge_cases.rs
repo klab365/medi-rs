@@ -20,7 +20,7 @@ mod zero_capacity {
     #[test]
     #[should_panic(expected = "event_queue_capacity must be greater than zero")]
     fn constructor_rejects_zero_queue_capacity() {
-        let _ = Mediator::new();
+        let _ = Mediator::builder().build();
     }
 }
 
@@ -42,7 +42,7 @@ mod zero_workers {
     #[test]
     #[should_panic(expected = "event_workers must be greater than zero")]
     fn start_rejects_zero_workers() {
-        let mediator = Box::leak(Box::new(Mediator::new()));
+        let mediator = Box::leak(Box::new(Mediator::builder().build()));
         mediator.start().expect("mediator must start");
     }
 }
@@ -62,7 +62,7 @@ mod backpressure {
 
     #[test]
     fn try_publish_reports_a_full_queue_without_waiting() {
-        let mediator = Mediator::new();
+        let mediator = Mediator::builder().build();
         assert!(mediator.try_publish(Event).is_ok());
         assert!(matches!(
             mediator.try_publish(Event),
@@ -72,7 +72,7 @@ mod backpressure {
 
     #[tokio::test]
     async fn publish_waits_while_the_bounded_queue_is_full() {
-        let mediator = Mediator::new();
+        let mediator = Mediator::builder().build();
         mediator.publish(Event).await.unwrap();
         assert!(
             tokio::time::timeout(Duration::from_millis(20), mediator.publish(Event))
@@ -106,7 +106,7 @@ mod handler_errors {
 
     medi_module! {
         manifest manifest;
-        resources { Completion; }
+        resources { completion: Completion; }
         events { Event => [failing_handler, succeeding_handler]; }
     }
 
@@ -121,7 +121,7 @@ mod handler_errors {
     #[tokio::test]
     async fn failures_do_not_prevent_later_handlers() {
         let completion = Completion(Arc::new(Notify::new()));
-        let mediator = Box::leak(Box::new(Mediator::new(completion.clone())));
+        let mediator = Box::leak(Box::new(Mediator::builder().completion(completion.clone()).build()));
         mediator.start().expect("mediator must start");
 
         let completed = completion.0.notified();
@@ -153,7 +153,7 @@ mod multiple_workers {
 
     medi_module! {
         manifest manifest;
-        resources { Counter; }
+        resources { counter: Counter; }
         events { Event => [count]; }
     }
 
@@ -170,7 +170,7 @@ mod multiple_workers {
         const EVENT_COUNT: usize = 20;
 
         let counter = Counter(Arc::new(AtomicUsize::new(0)));
-        let mediator = Box::leak(Box::new(Mediator::new(counter.clone())));
+        let mediator = Box::leak(Box::new(Mediator::builder().counter(counter.clone()).build()));
         mediator.start().expect("mediator must start");
 
         for _ in 0..EVENT_COUNT {

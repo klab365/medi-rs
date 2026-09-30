@@ -57,7 +57,7 @@ mod audit {
         manifest audit_manifest;
         commands { RecordAudit => record_audit; }
         events { UserCreated => [write_audit_log]; }
-        resources { AuditRepository; }
+        resources { audit_repository: AuditRepository; }
     }
 }
 
@@ -68,7 +68,7 @@ mod users {
         manifest users_manifest;
         commands { CreateUser => create_user; }
         events { UserCreated => [send_welcome_email]; }
-        resources { UserRepository; }
+        resources { user_repository: UserRepository; }
     }
 }
 
@@ -90,7 +90,10 @@ fn composition_collects_manifests_from_separate_modules() {
 
 #[tokio::test]
 async fn composition_generates_static_command_routes() {
-    let mediator = AppMediator::new(UserRepository("users"), AuditRepository("audit"));
+    let mediator = AppMediator::builder()
+        .user_repository(UserRepository("users"))
+        .audit_repository(AuditRepository("audit"))
+        .build();
 
     mediator.send(CreateUser).await.unwrap();
     mediator.send(RecordAudit).await.unwrap();
@@ -99,10 +102,12 @@ async fn composition_generates_static_command_routes() {
 #[tokio::test]
 async fn composition_generates_static_event_routes() {
     EVENT_HANDLERS_RUN.store(0, Ordering::SeqCst);
-    let mediator = Box::leak(Box::new(AppMediator::new(
-        UserRepository("users"),
-        AuditRepository("audit"),
-    )));
+    let mediator = Box::leak(Box::new(
+        AppMediator::builder()
+            .user_repository(UserRepository("users"))
+            .audit_repository(AuditRepository("audit"))
+            .build(),
+    ));
     mediator.start().expect("mediator must start");
 
     mediator.publish(UserCreated).await.unwrap();

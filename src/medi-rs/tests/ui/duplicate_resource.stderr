@@ -1,8 +1,8 @@
 error: duplicate resource registration for `Database`
-  --> tests/ui/duplicate_resource.rs:17:21
+  --> tests/ui/duplicate_resource.rs:17:31
    |
-17 |           resources { Database; }
-   |                       ^^^^^^^^
+17 |           resources { database: Database; }
+   |                                 ^^^^^^^^
 ...
 24 | / mediator! {
 25 | |     pub struct AppMediator {
@@ -15,9 +15,41 @@ error: duplicate resource registration for `Database`
    = note: this error originates in the macro `second_manifest` which comes from the expansion of the macro `mediator` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error: first resource registration for `Database` is here
+  --> tests/ui/duplicate_resource.rs:8:31
+   |
+ 8 |           resources { database: Database; }
+   |                                 ^^^^^^^^
+...
+24 | / mediator! {
+25 | |     pub struct AppMediator {
+26 | |         event_queue_capacity: 16;
+27 | |         event_workers: 1;
+...  |
+30 | | }
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `first_manifest` which comes from the expansion of the macro `mediator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: duplicate builder resource name `database`
+  --> tests/ui/duplicate_resource.rs:17:21
+   |
+17 |           resources { database: Database; }
+   |                       ^^^^^^^^
+...
+24 | / mediator! {
+25 | |     pub struct AppMediator {
+26 | |         event_queue_capacity: 16;
+27 | |         event_workers: 1;
+...  |
+30 | | }
+   | |_- in this macro invocation
+   |
+   = note: this error originates in the macro `second_manifest` which comes from the expansion of the macro `mediator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error: first builder resource name `database` is here
   --> tests/ui/duplicate_resource.rs:8:21
    |
- 8 |           resources { Database; }
+ 8 |           resources { database: Database; }
    |                       ^^^^^^^^
 ...
 24 | / mediator! {
