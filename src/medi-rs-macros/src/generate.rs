@@ -76,12 +76,14 @@ pub(crate) fn generate_hook_calls(hooks: &[syn::Path], phase: &str) -> Vec<proc_
         .collect()
 }
 
+#[cfg(feature = "embassy")]
 fn generate_startup_spawner() -> proc_macro2::TokenStream {
-    if cfg!(feature = "embassy") {
-        quote! { let startup_spawner = ::medi_rs::StartupSpawner::from(spawner); }
-    } else {
-        quote! { let startup_spawner = ::medi_rs::StartupSpawner::unavailable(); }
-    }
+    quote! { let startup_spawner = ::medi_rs::StartupSpawner::from(spawner); }
+}
+
+#[cfg(not(feature = "embassy"))]
+fn generate_startup_spawner() -> proc_macro2::TokenStream {
+    quote! { let startup_spawner = ::medi_rs::StartupSpawner::unavailable(); }
 }
 
 pub(crate) fn collect_resource_types(modules: &[ModuleManifest]) -> Vec<Type> {

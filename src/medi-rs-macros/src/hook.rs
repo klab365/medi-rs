@@ -1,9 +1,10 @@
 //! `#[medi_startup]` and `#[medi_shutdown]` expansion.
 
 use crate::handler::{InjectedParameters, typed_arguments};
+use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
-use syn::{ItemFn, Type, parse_macro_input};
+use syn::{ItemFn, Type};
 
 fn runtime_is_enabled() -> bool {
     cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy"))
@@ -34,31 +35,35 @@ pub fn medi_hook_inner(
     attribute: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
+    medi_hook_inner_impl(phase, attribute.into(), input.into()).into()
+}
+
+fn medi_hook_inner_impl(phase: &str, attribute: TokenStream, input: TokenStream) -> TokenStream {
     if !runtime_is_enabled() {
         return syn::Error::new(
             proc_macro2::Span::call_site(),
             "lifecycle hooks require a medi-rs runtime feature",
         )
-        .into_compile_error()
-        .into();
+        .into_compile_error();
     }
     if !attribute.is_empty() {
         return syn::Error::new(
             proc_macro2::Span::call_site(),
             "lifecycle hooks do not accept arguments",
         )
-        .into_compile_error()
-        .into();
+        .into_compile_error();
     }
 
-    let function = parse_macro_input!(input as ItemFn);
+    let function = match syn::parse2::<ItemFn>(input) {
+        Ok(function) => function,
+        Err(error) => return error.into_compile_error(),
+    };
     if function.sig.asyncness.is_some() {
         return syn::Error::new(
             function.sig.asyncness.span(),
             "lifecycle hooks must be synchronous functions",
         )
-        .into_compile_error()
-        .into();
+        .into_compile_error();
     }
     let name = &function.sig.ident;
     let helper = format_ident!("__medi_{phase}_{name}");
@@ -70,19 +75,17 @@ pub fn medi_hook_inner(
                 arguments[0],
                 "`StartupSpawner` is only available to `#[medi_startup]` hooks",
             )
-            .into_compile_error()
-            .into();
+            .into_compile_error();
         }
         if !cfg!(feature = "embassy") {
             return syn::Error::new_spanned(arguments[0], "`StartupSpawner` requires the `embassy` runtime feature")
-                .into_compile_error()
-                .into();
+                .into_compile_error();
         }
         arguments.remove(0);
     }
     let parameters = match InjectedParameters::parse(arguments) {
         Ok(parameters) => parameters,
-        Err(error) => return error.into_compile_error().into(),
+        Err(error) => return error.into_compile_error(),
     };
     let call_arguments = parameters
         .resources
@@ -128,5 +131,34 @@ pub fn medi_hook_inner(
             #helper_body
         }
     }
-    .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::medi_hook_inner_impl;
+    use quote::quote;
+
+    #[test]
+    fn rejects_startup_spawner_outside_embassy() {
+        let expanded = medi_hook_inner_impl(
+            "startup",
+            quote! {},
+            quote! { fn initialize(_: &medi_rs::StartupSpawner) {} },
+        )
+        .to_string();
+
+        assert!(expanded.contains("requires the `embassy` runtime feature"));
+    }
+
+    #[test]
+    fn rejects_startup_spawner_in_shutdown_hooks() {
+        let expanded = medi_hook_inner_impl(
+            "shutdown",
+            quote! {},
+            quote! { fn cleanup(_: &medi_rs::StartupSpawner) {} },
+        )
+        .to_string();
+
+        assert!(expanded.contains("only available to `#[medi_startup]` hooks"));
+    }
 }
