@@ -61,7 +61,11 @@ pub fn medi_handler(attribute: proc_macro::TokenStream, input: proc_macro::Token
 /// Register a synchronous startup hook with typed mediator and resource injection.
 ///
 /// Hooks are listed in a module's `startup` section and run in composition
-/// order before event workers and runtime tasks are spawned.
+/// order before event workers and runtime tasks are spawned. A hook may return
+/// `Result<(), E>`; its error makes `start` return
+/// `StartError::StartupHookFailed`. With the `embassy` feature, its first
+/// parameter may be `&medi_rs::StartupSpawner`, a temporary executor-local
+/// spawner that exists only during `start(spawner)`.
 #[proc_macro_attribute]
 pub fn medi_startup(attribute: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     medi_hook_inner("startup", attribute, input)
