@@ -5,7 +5,9 @@ the `embassy` adapter. It uses `StaticCell` for the generated mediator and no
 allocator or `extern crate alloc`.
 
 `main.rs` bootstraps the concrete `EmbassyBoard` GPIO implementation and injects
-it as the `BoardApi` resource. Its registered `button_monitor` Embassy task
+it as the `BoardApi` resource. Its `#[medi_startup]` hook receives the temporary
+`StartupSpawner` from `mediator.start(spawner)` and uses it to start the
+executor-local startup indicator without storing a spawner resource. Its registered `button_monitor` Embassy task
 owns and awaits Button A, while its `display` task toggles an LED matrix pixel
 through that trait-based API. `button_monitor` sends `ButtonPressed`, whose
 handler also uses `BoardApi` and publishes `ButtonObserved`; the generated

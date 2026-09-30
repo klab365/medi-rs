@@ -203,6 +203,7 @@ pub mod tlist;
 pub use adapters::lifecycle::Lifecycle;
 pub use adapters::queue::EventQueue;
 pub use adapters::shutdown::ShutdownSignal;
+pub use adapters::startup::StartupSpawner;
 pub use adapters::stream::{StreamChannel, StreamChannelReceiver, StreamChannelSender};
 pub use error::*;
 #[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]

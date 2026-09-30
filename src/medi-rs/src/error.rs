@@ -8,6 +8,37 @@
 pub enum StartError {
     /// The mediator has already started its generated workers and tasks.
     AlreadyStarted,
+    /// A startup hook returned an error.
+    ///
+    /// The hook name identifies the failed initialization step. Startup hooks
+    /// may use unrelated concrete error types, so the generated mediator
+    /// cannot expose one common error value.
+    StartupHookFailed {
+        /// Name of the hook that returned an error.
+        hook: &'static str,
+    },
+}
+
+/// Converts supported startup-hook return values into a mediator start result.
+///
+/// This trait is implemented for `()` and `Result<(), E>`. It is public only
+/// because `#[medi_startup]` expands in the application crate.
+#[doc(hidden)]
+pub trait StartupHookResult {
+    /// Return the framework start result for this hook invocation.
+    fn into_start_result(self, hook: &'static str) -> core::result::Result<(), StartError>;
+}
+
+impl StartupHookResult for () {
+    fn into_start_result(self, _: &'static str) -> core::result::Result<(), StartError> {
+        Ok(())
+    }
+}
+
+impl<E> StartupHookResult for core::result::Result<(), E> {
+    fn into_start_result(self, hook: &'static str) -> core::result::Result<(), StartError> {
+        self.map_err(|_| StartError::StartupHookFailed { hook })
+    }
 }
 
 /// Error returned by a non-blocking event publish attempt.

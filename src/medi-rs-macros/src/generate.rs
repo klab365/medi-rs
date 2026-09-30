@@ -67,9 +67,23 @@ pub(crate) fn generate_hook_calls(hooks: &[syn::Path], phase: &str) -> Vec<proc_
         .iter()
         .map(|hook| {
             let invoker = hook_invoker_path(hook, phase);
-            quote! { #invoker(self, &self.resources); }
+            if phase == "startup" {
+                quote! { #invoker(&startup_spawner, self, &self.resources)?; }
+            } else {
+                quote! { #invoker(self, &self.resources); }
+            }
         })
         .collect()
+}
+
+#[cfg(feature = "embassy")]
+fn generate_startup_spawner() -> proc_macro2::TokenStream {
+    quote! { let startup_spawner = ::medi_rs::StartupSpawner::from(spawner); }
+}
+
+#[cfg(not(feature = "embassy"))]
+fn generate_startup_spawner() -> proc_macro2::TokenStream {
+    quote! { let startup_spawner = ::medi_rs::StartupSpawner::unavailable(); }
 }
 
 pub(crate) fn collect_resource_types(modules: &[ModuleManifest]) -> Vec<Type> {
@@ -380,6 +394,7 @@ fn generate_event_start(
     task_spawns: &[proc_macro2::TokenStream],
     startup_hooks: &[proc_macro2::TokenStream],
 ) -> proc_macro2::TokenStream {
+    let startup_spawner = generate_startup_spawner();
     if cfg!(feature = "embassy") {
         quote! {
             /// Start generated Embassy event workers and registered runtime tasks.
@@ -389,6 +404,7 @@ fn generate_event_start(
             pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
                 self.lifecycle.start()?;
+                #startup_spawner
                 #(#startup_hooks)*
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
@@ -412,6 +428,7 @@ fn generate_event_start(
             pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
                 self.lifecycle.start()?;
+                #startup_spawner
                 #(#startup_hooks)*
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
@@ -556,6 +573,7 @@ pub(crate) fn generate_task_only_start(
     });
     let startup_hooks = hooks.startup;
     let shutdown_hooks = hooks.shutdown;
+    let startup_spawner = generate_startup_spawner();
     if cfg!(feature = "embassy") {
         quote! { impl #name {
             /// Start the registered Embassy tasks.
@@ -564,6 +582,7 @@ pub(crate) fn generate_task_only_start(
             /// spawning work when this mediator was already started.
             pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 self.lifecycle.start()?;
+                #startup_spawner
                 #(#startup_hooks)*
                 #(#task_spawns)*
                 Ok(())
@@ -589,6 +608,7 @@ pub(crate) fn generate_task_only_start(
             /// spawning work when this mediator was already started.
             pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 self.lifecycle.start()?;
+                #startup_spawner
                 #(#startup_hooks)*
                 #(#task_spawns)*
                 Ok(())

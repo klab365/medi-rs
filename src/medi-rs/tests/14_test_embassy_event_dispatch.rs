@@ -10,7 +10,7 @@ use std::{
 };
 
 use futures::{pin_mut, poll};
-use medi_rs::{SendSpawner, StartError, medi_handler, medi_module, medi_task, mediator};
+use medi_rs::{SendSpawner, StartError, StartupSpawner, medi_handler, medi_module, medi_startup, medi_task, mediator};
 
 #[derive(Clone)]
 struct EventObserved(u32);
@@ -22,6 +22,7 @@ static OBSERVED_VALUE: AtomicU32 = AtomicU32::new(0);
 static TASK_STARTED: AtomicU32 = AtomicU32::new(0);
 static SPAWNER_INJECTED: AtomicU32 = AtomicU32::new(0);
 static SPAWNED_WITH_RESOURCE: AtomicU32 = AtomicU32::new(0);
+static SPAWNED_DURING_STARTUP: AtomicU32 = AtomicU32::new(0);
 
 #[medi_handler]
 async fn observe_event(event: EventObserved) -> medi_rs::Result<()> {
@@ -39,6 +40,18 @@ async fn spawned_with_resource() {
     SPAWNED_WITH_RESOURCE.store(1, Ordering::Release);
 }
 
+#[embassy_executor::task]
+async fn spawned_during_startup() {
+    SPAWNED_DURING_STARTUP.store(1, Ordering::Release);
+}
+
+#[medi_startup]
+fn initialize_startup_task(spawner: &StartupSpawner, _mediator: &EmbassyTestMediator) {
+    if let Ok(token) = spawned_during_startup() {
+        spawner.spawn(token);
+    }
+}
+
 #[medi_task]
 async fn receives_spawner(spawner: SendSpawner) {
     SPAWNER_INJECTED.store(1, Ordering::Release);
@@ -52,6 +65,7 @@ medi_module! {
     resources { TaskState; SendSpawner; }
     events { EventObserved => [observe_event]; }
     tasks { initialize_board; receives_spawner; }
+    startup { initialize_startup_task; }
 }
 
 mediator! {
@@ -118,6 +132,7 @@ fn embassy_worker_dispatches_published_events() {
         || TASK_STARTED.load(Ordering::Acquire) != 1
         || SPAWNER_INJECTED.load(Ordering::Acquire) != 1
         || SPAWNED_WITH_RESOURCE.load(Ordering::Acquire) != 1
+        || SPAWNED_DURING_STARTUP.load(Ordering::Acquire) != 1
     {
         assert!(Instant::now() < deadline, "event worker or Embassy task did not run");
         thread::sleep(Duration::from_millis(1));
