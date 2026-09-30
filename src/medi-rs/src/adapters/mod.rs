@@ -70,6 +70,7 @@ macro_rules! impl_event_queue {
 pub mod lifecycle;
 pub mod queue;
 pub mod shutdown;
+pub mod startup;
 pub mod stream;
 
 #[cfg(feature = "embassy")]

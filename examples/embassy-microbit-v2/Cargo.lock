@@ -674,7 +674,7 @@ dependencies = [
 
 [[package]]
 name = "medi-rs"
-version = "2.5.0"
+version = "2.5.1"
 dependencies = [
  "embassy-executor",
  "embassy-sync",
@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "medi-rs-macros"
-version = "2.5.0"
+version = "2.5.1"
 dependencies = [
  "proc-macro2",
  "quote",

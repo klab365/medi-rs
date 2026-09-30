@@ -195,7 +195,7 @@ medi_module! {
 
 Use semicolons between resource, command, and stream entries, and commas between event handlers. When a handler is private in a feature module, use its crate-qualified path (for example, `crate::users::create_user`) in the manifest; the generated invoker remains crate-visible while the handler stays private. The manifest contains declarations only: it does not construct a mediator or register anything dynamically.
 
-With a runtime feature, manifests may also declare synchronous lifecycle hooks. Mark each hook with `#[medi_startup]` or `#[medi_shutdown]`, then list it in `startup` or `shutdown`. Hooks receive the same optional `&AppMediator` and typed resources as handlers. Startup hooks run once in module composition order before event workers and runtime tasks start; shutdown hooks run once in that order after they have returned.
+With a runtime feature, manifests may also declare synchronous lifecycle hooks. Mark each hook with `#[medi_startup]` or `#[medi_shutdown]`, then list it in `startup` or `shutdown`. Hooks receive the same optional `&AppMediator` and typed resources as handlers. A startup hook may return `Result<(), E>`; `start` then returns `StartError::StartupHookFailed` with the failed hook name and does not start workers or runtime tasks. Startup hooks run once in module composition order before event workers and runtime tasks start; shutdown hooks run once in that order after they have returned.
 
 ```rust,ignore
 #[medi_startup]
@@ -321,7 +321,9 @@ Use `Option<T>` in `resources { ... }` only when a dependency is optional for th
 
 With a runtime feature, `#[medi_task]` creates a task with the same typed resource injection as a handler. It may take `&AppMediator` as its first parameter when it needs mediator access. It may then take `&ShutdownSignal`; this is injected by the mediator and is cancelled by `mediator.shutdown()`. Remaining value parameters are declared resources. Register it in a `tasks` section. `mediator.start(spawner)` starts tasks on Embassy; `mediator.start()` does so on Tokio and Wasm.
 
-On Embassy, a handler, task, or lifecycle hook can start additional statically declared `Send` Embassy tasks by declaring `medi_rs::SendSpawner` as a resource and passing `spawner.make_send()` from `main` to the mediator constructor. Pass the original `Spawner` to `start` as usual. The Embassy micro:bit example uses this from its startup hook:
+On Embassy, a handler, task, or lifecycle hook can start additional statically declared `Send` Embassy tasks by declaring `medi_rs::SendSpawner` as a resource and passing `spawner.make_send()` from `main` to the mediator constructor. Pass the original `Spawner` to `start` as usual.
+
+A `#[medi_startup]` hook can instead declare `&medi_rs::StartupSpawner` as its first parameter. This temporary, non-`Send` spawner exists only while `start(spawner)` invokes startup hooks and is not a mediator resource, so it can start executor-local tasks such as SoftDevice tasks:
 
 ```rust,ignore
 #[embassy_executor::task]
@@ -330,7 +332,7 @@ async fn warm_up_board(board: BoardApi) {
 }
 
 #[medi_startup]
-fn initialize_board(spawner: medi_rs::SendSpawner, board: BoardApi) {
+fn initialize_board(spawner: &medi_rs::StartupSpawner, board: BoardApi) {
     if let Ok(token) = warm_up_board(board) {
         spawner.spawn(token);
     }

@@ -9,6 +9,9 @@ struct HookState(&'static AtomicUsize);
 
 static HOOK_STATE: AtomicUsize = AtomicUsize::new(0);
 
+#[derive(Debug)]
+struct InitializationError;
+
 #[medi_startup]
 fn initialize(_mediator: &LifecycleMediator, state: &HookState) {
     assert_eq!(state.0.fetch_add(1, Ordering::AcqRel), 0);
@@ -17,6 +20,24 @@ fn initialize(_mediator: &LifecycleMediator, state: &HookState) {
 #[medi_shutdown]
 fn cleanup(_mediator: &LifecycleMediator, state: &HookState) {
     assert_eq!(state.0.fetch_add(1, Ordering::AcqRel), 1);
+}
+
+#[medi_startup]
+fn reject_startup() -> Result<(), InitializationError> {
+    Err(InitializationError)
+}
+
+medi_module! {
+    manifest failing_startup_manifest;
+    startup { reject_startup; }
+}
+
+mediator! {
+    struct FailingStartupMediator {
+        event_queue_capacity: 1;
+        event_workers: 1;
+        modules: [failing_startup_manifest];
+    }
 }
 
 #[derive(MediCommand)]
@@ -69,4 +90,14 @@ async fn lifecycle_hooks_run_once_in_startup_then_shutdown_order() {
     assert_eq!(HOOK_STATE.load(Ordering::Acquire), 1);
     mediator.shutdown().await.unwrap();
     assert_eq!(HOOK_STATE.load(Ordering::Acquire), 2);
+}
+
+#[test]
+fn startup_hook_errors_are_returned_from_start() {
+    let mediator = Box::leak(Box::new(FailingStartupMediator::new()));
+
+    assert_eq!(
+        mediator.start(),
+        Err(medi_rs::StartError::StartupHookFailed { hook: "reject_startup" })
+    );
 }

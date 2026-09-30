@@ -3,10 +3,19 @@
 use crate::handler::{InjectedParameters, typed_arguments};
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
-use syn::{ItemFn, parse_macro_input};
+use syn::{ItemFn, Type, parse_macro_input};
 
 fn runtime_is_enabled() -> bool {
     cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy"))
+}
+
+fn is_startup_spawner(ty: &Type) -> bool {
+    matches!(ty,
+        Type::Reference(reference)
+            if reference.mutability.is_none()
+                && matches!(reference.elem.as_ref(), Type::Path(path)
+                    if path.qself.is_none()
+                        && path.path.segments.last().is_some_and(|segment| segment.ident == "StartupSpawner")))
 }
 
 pub(crate) fn hook_invoker_path(hook: &syn::Path, phase: &str) -> syn::Path {
@@ -53,7 +62,25 @@ pub fn medi_hook_inner(
     }
     let name = &function.sig.ident;
     let helper = format_ident!("__medi_{phase}_{name}");
-    let parameters = match InjectedParameters::parse(typed_arguments(&function)) {
+    let mut arguments = typed_arguments(&function);
+    let uses_startup_spawner = arguments.first().is_some_and(|argument| is_startup_spawner(argument));
+    if uses_startup_spawner {
+        if phase != "startup" {
+            return syn::Error::new_spanned(
+                arguments[0],
+                "`StartupSpawner` is only available to `#[medi_startup]` hooks",
+            )
+            .into_compile_error()
+            .into();
+        }
+        if !cfg!(feature = "embassy") {
+            return syn::Error::new_spanned(arguments[0], "`StartupSpawner` requires the `embassy` runtime feature")
+                .into_compile_error()
+                .into();
+        }
+        arguments.remove(0);
+    }
+    let parameters = match InjectedParameters::parse(arguments) {
         Ok(parameters) => parameters,
         Err(error) => return error.into_compile_error().into(),
     };
@@ -71,21 +98,34 @@ pub fn medi_hook_inner(
     let resource_bounds = parameters.resource_bounds();
     let mediator_parameter = parameters.mediator_parameter();
     let helper_generics = parameters.helper_generics(core::iter::empty());
-    let hook_call = if parameters.context.is_some() {
-        quote! { #name(mediator, #(#call_arguments)*) }
+    let startup_spawner_parameter =
+        (phase == "startup").then(|| quote! { startup_spawner: &::medi_rs::StartupSpawner, });
+    let hook_call = match (uses_startup_spawner, parameters.context.is_some()) {
+        (true, true) => quote! { #name(startup_spawner, mediator, #(#call_arguments)*) },
+        (true, false) => quote! { #name(startup_spawner, #(#call_arguments)*) },
+        (false, true) => quote! { #name(mediator, #(#call_arguments)*) },
+        (false, false) => quote! { #name(#(#call_arguments)*) },
+    };
+    let helper_body = if phase == "startup" {
+        quote! { ::medi_rs::StartupHookResult::into_start_result(#hook_call, stringify!(#name)) }
     } else {
-        quote! { #name(#(#call_arguments)*) }
+        quote! { let (): () = #hook_call; }
+    };
+    let output = if phase == "startup" {
+        quote! { -> core::result::Result<(), ::medi_rs::StartError> }
+    } else {
+        quote! {}
     };
 
     quote! {
         #function
 
         #[doc(hidden)]
-        pub(crate) fn #helper #helper_generics(#mediator_parameter resources: &R)
+        pub(crate) fn #helper #helper_generics(#startup_spawner_parameter #mediator_parameter resources: &R) #output
         where
             #(#resource_bounds)*
         {
-            let (): () = #hook_call;
+            #helper_body
         }
     }
     .into()
