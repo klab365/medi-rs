@@ -2,6 +2,12 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## [2.6.0](https://github.com/klab365/medi-rs/compare/medi-rs-v2.5.1...medi-rs-v2.6.0) - 2026-09-30
+
+### Added
+
+- support startup spawners and hook failures
+
 ## [2.5.1](https://github.com/klab365/medi-rs/compare/medi-rs-v2.5.0...medi-rs-v2.5.1) - 2026-09-30
 
 ### Other

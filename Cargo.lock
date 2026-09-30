@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "medi-rs"
-version = "2.5.1"
+version = "2.6.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "medi-rs-macros"
-version = "2.5.1"
+version = "2.6.0"
 dependencies = [
  "proc-macro2",
  "quote",
