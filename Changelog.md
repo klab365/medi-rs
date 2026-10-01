@@ -2,6 +2,17 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## [3.0.0](https://github.com/klab365/medi-rs/compare/medi-rs-v2.6.0...medi-rs-v3.0.0) - 2026-10-01
+
+### Added
+
+- export mediator module manifests
+- [**breaking**] require named resources and builder construction
+
+### Other
+
+- Add event publish-and-wait support
+
 ## [2.6.0](https://github.com/klab365/medi-rs/compare/medi-rs-v2.5.1...medi-rs-v2.6.0) - 2026-09-30
 
 ### Added
