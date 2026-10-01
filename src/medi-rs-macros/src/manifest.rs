@@ -1,5 +1,6 @@
 //! `medi_module!` manifest parsing and expansion.
 
+use proc_macro2::{Group, Punct, Spacing, TokenStream, TokenTree};
 use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::{Ident, Result as SynResult, Token, Type, braced, bracketed, parse_macro_input};
@@ -172,22 +173,54 @@ pub(crate) fn handler_invoker_path(handler: &syn::Path) -> syn::Path {
 }
 
 struct MediModuleInput {
+    exported: bool,
     manifest: Ident,
     module: ModuleManifest,
 }
 
 impl Parse for MediModuleInput {
     fn parse(input: ParseStream<'_>) -> SynResult<Self> {
+        let exported = input.peek(Token![pub]);
+        if exported {
+            input.parse::<Token![pub]>()?;
+        }
         let manifest_key: Ident = input.parse()?;
         if manifest_key != "manifest" {
-            return Err(syn::Error::new(manifest_key.span(), "expected `manifest`"));
+            return Err(syn::Error::new(
+                manifest_key.span(),
+                "expected `manifest` or `pub manifest`",
+            ));
         }
         let manifest: Ident = input.parse()?;
         input.parse::<Token![;]>()?;
         let module = input.parse()?;
 
-        Ok(Self { manifest, module })
+        Ok(Self {
+            exported,
+            manifest,
+            module,
+        })
     }
+}
+
+/// Replace `crate` in user paths with macro_rules' `$crate`, so a public
+/// manifest keeps referring to its defining crate when expanded by a consumer.
+fn externalize_crate_paths(tokens: TokenStream) -> TokenStream {
+    tokens
+        .into_iter()
+        .flat_map(|token| match token {
+            TokenTree::Ident(ident) if ident == "crate" => vec![
+                TokenTree::Punct(Punct::new('$', Spacing::Alone)),
+                TokenTree::Ident(ident),
+            ],
+            TokenTree::Group(group) => {
+                let mut rewritten = Group::new(group.delimiter(), externalize_crate_paths(group.stream()));
+                rewritten.set_span(group.span());
+                vec![TokenTree::Group(rewritten)]
+            }
+            token => vec![token],
+        })
+        .collect()
 }
 
 /// Emit a local manifest macro which appends this module's declarations to the
@@ -195,44 +228,78 @@ impl Parse for MediModuleInput {
 /// later composition proc macro will parse the complete registration graph.
 pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as MediModuleInput);
+    let exported = input.exported;
     let manifest = input.manifest;
+    let rewrite = |tokens| {
+        if exported {
+            externalize_crate_paths(tokens)
+        } else {
+            tokens
+        }
+    };
     let commands = input.module.commands.into_iter().map(|command| {
-        let request = command.request;
-        let handler = command.handler;
+        let CommandManifest { request, handler } = command;
+        let request = rewrite(quote! { #request });
+        let handler = rewrite(quote! { #handler });
         quote! { #request => #handler; }
     });
     let streams = input.module.streams.into_iter().map(|stream| {
-        let request = stream.request;
-        let handler = stream.handler;
+        let CommandManifest { request, handler } = stream;
+        let request = rewrite(quote! { #request });
+        let handler = rewrite(quote! { #handler });
         quote! { #request => #handler; }
     });
     let events = input.module.events.into_iter().map(|event| {
-        let event_type = event.event;
-        let handlers = event.handlers;
+        let EventManifest { event, handlers } = event;
+        let event_type = rewrite(quote! { #event });
+        let handlers: Vec<_> = handlers
+            .into_iter()
+            .map(|handler| rewrite(quote! { #handler }))
+            .collect();
         quote! { #event_type => [#(#handlers),*]; }
     });
     let resources = input.module.resources.into_iter().map(|resource| {
-        let resource_type = resource.resource_type;
-        if let Some(name) = resource.name {
+        let ResourceManifest { name, resource_type } = resource;
+        let resource_type = rewrite(quote! { #resource_type });
+        if let Some(name) = name {
             quote! { #name: #resource_type; }
         } else {
             quote! { #resource_type; }
         }
     });
-    let tasks: Vec<_> = input.module.tasks.into_iter().map(|task| quote! { #task; }).collect();
-    let startup: Vec<_> = input.module.startup.into_iter().map(|hook| quote! { #hook; }).collect();
+    let tasks: Vec<_> = input
+        .module
+        .tasks
+        .into_iter()
+        .map(|task| rewrite(quote! { #task; }))
+        .collect();
+    let startup: Vec<_> = input
+        .module
+        .startup
+        .into_iter()
+        .map(|hook| rewrite(quote! { #hook; }))
+        .collect();
     let shutdown: Vec<_> = input
         .module
         .shutdown
         .into_iter()
-        .map(|hook| quote! { #hook; })
+        .map(|hook| rewrite(quote! { #hook; }))
         .collect();
     // Do not emit empty runtime-only sections so command-only manifests remain usable without a runtime.
     let tasks_section = (!tasks.is_empty()).then(|| quote! { tasks { #(#tasks)* } });
     let startup_section = (!startup.is_empty()).then(|| quote! { startup { #(#startup)* } });
     let shutdown_section = (!shutdown.is_empty()).then(|| quote! { shutdown { #(#shutdown)* } });
 
+    let export_attribute = exported.then(|| quote! { #[macro_export] });
+    let manifest_use = (!exported).then(|| {
+        quote! {
+            #[allow(unused_imports)]
+            pub(crate) use #manifest;
+        }
+    });
+
     quote! {
+        #export_attribute
         macro_rules! #manifest {
             ($callback:path, {
                 $vis:vis struct $name:ident;
@@ -265,8 +332,7 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
             };
         }
 
-        #[allow(unused_imports)]
-        pub(crate) use #manifest;
+        #manifest_use
     }
     .into()
 }

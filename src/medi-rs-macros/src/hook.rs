@@ -124,7 +124,7 @@ fn medi_hook_inner_impl(phase: &str, attribute: TokenStream, input: TokenStream)
         #function
 
         #[doc(hidden)]
-        pub(crate) fn #helper #helper_generics(#startup_spawner_parameter #mediator_parameter resources: &R) #output
+        pub fn #helper #helper_generics(#startup_spawner_parameter #mediator_parameter resources: &R) #output
         where
             #(#resource_bounds)*
         {

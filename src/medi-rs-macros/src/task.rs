@@ -112,7 +112,7 @@ pub fn medi_task_inner(attribute: proc_macro::TokenStream, input: proc_macro::To
         #function
 
         #[doc(hidden)]
-        pub(crate) async fn #helper #helper_generics(
+        pub async fn #helper #helper_generics(
             #mediator_parameter
             resources: &R,
             signal: &'static ::medi_rs::ShutdownSignal,

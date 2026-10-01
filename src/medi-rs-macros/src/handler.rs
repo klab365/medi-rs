@@ -218,7 +218,7 @@ pub fn medi_handler_inner(
         #function
 
         #[doc(hidden)]
-        pub(crate) async fn #helper #helper_generics(
+        pub async fn #helper #helper_generics(
             #mediator_parameter
             resources: &R,
             message: #message,
