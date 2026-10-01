@@ -206,6 +206,22 @@ pub use adapters::shutdown::ShutdownSignal;
 pub use adapters::startup::StartupSpawner;
 pub use adapters::stream::{StreamChannel, StreamChannelReceiver, StreamChannelSender};
 pub use error::*;
+
+/// Internal sender used by generated event dispatch routes.
+#[cfg(any(feature = "tokio", feature = "wasm"))]
+#[doc(hidden)]
+pub type __EventCompletionSender = futures::channel::oneshot::Sender<EventDispatchOutcome>;
+
+/// Create the completion channel used by generated event dispatch routes.
+#[cfg(any(feature = "tokio", feature = "wasm"))]
+#[doc(hidden)]
+pub fn __event_completion_channel() -> (
+    __EventCompletionSender,
+    futures::channel::oneshot::Receiver<EventDispatchOutcome>,
+) {
+    futures::channel::oneshot::channel()
+}
+
 #[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
 #[doc(hidden)]
 pub use stream::StaticStream;
@@ -273,6 +289,44 @@ pub struct CompositionDescription {
 pub struct EventHandlerFailure {
     event_name: &'static str,
     handler_name: &'static str,
+}
+
+/// Completion summary returned by [`mediator!`]-generated
+/// [`publish_and_wait`](macro@mediator) methods.
+///
+/// Event-handler error types may differ, so this reports counts rather than
+/// carrying a concrete application error. Configure an [`EventFailureReporter`]
+/// when the application also needs route names for failed handlers.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EventDispatchOutcome {
+    succeeded_handlers: usize,
+    failed_handlers: usize,
+}
+
+impl EventDispatchOutcome {
+    /// Create an event-dispatch completion summary.
+    #[doc(hidden)]
+    pub const fn new(succeeded_handlers: usize, failed_handlers: usize) -> Self {
+        Self {
+            succeeded_handlers,
+            failed_handlers,
+        }
+    }
+
+    /// Number of handlers that completed successfully.
+    pub const fn succeeded_handlers(self) -> usize {
+        self.succeeded_handlers
+    }
+
+    /// Number of handlers that returned an error.
+    pub const fn failed_handlers(self) -> usize {
+        self.failed_handlers
+    }
+
+    /// Whether every handler completed successfully.
+    pub const fn is_success(self) -> bool {
+        self.failed_handlers == 0
+    }
 }
 
 impl EventHandlerFailure {
@@ -384,4 +438,15 @@ pub trait StaticPublish<M>: Sized {
 pub trait StaticTryPublish<M>: Sized {
     /// Attempt to enqueue this event without waiting for queue capacity.
     fn try_publish(self, mediator: &M) -> core::result::Result<(), TryPublishError<Self>>;
+}
+
+/// Static event route that waits for all generated event handlers to finish.
+///
+/// This is available with the Tokio and Wasm runtime adapters. Embassy's
+/// allocation-free event queue does not support per-event completion handles.
+#[cfg(any(feature = "tokio", feature = "wasm"))]
+#[doc(hidden)]
+pub trait StaticPublishAndWait<M>: Sized {
+    /// Enqueue this event and await completion of all its handlers.
+    fn publish_and_wait(self, mediator: &M) -> impl core::future::Future<Output = Result<EventDispatchOutcome>> + Send;
 }

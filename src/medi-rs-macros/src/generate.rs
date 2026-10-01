@@ -461,13 +461,43 @@ fn generate_event_dispatch_arms(
     job: &Ident,
     decorators: &[Path],
     has_failure_reporter: bool,
+    include_completion: bool,
 ) -> Vec<proc_macro2::TokenStream> {
     routes
         .iter()
         .enumerate()
-        .map(|(index, (event_type, handlers))| {
+        .flat_map(|(index, (event_type, handlers))| {
             let variant = format_ident!("Event{index}");
+            let completion_variant = format_ident!("Event{index}AndWait");
             let calls = handlers.iter().map(|handler| {
+                let invoker = handler_invoker_path(handler);
+                let invocation = if decorators.is_empty() {
+                    quote! { #invoker(mediator, &mediator.resources, event.clone()).await }
+                } else {
+                    decorate_handler_call(
+                        decorators,
+                        quote! { event.clone() },
+                        &quote! { #invoker(mediator, &mediator.resources, message).await },
+                    )
+                };
+                let failure_report = has_failure_reporter.then(|| {
+                    quote! {
+                        ::medi_rs::EventFailureReporter::report(
+                            &mediator.event_failure_reporter,
+                            ::medi_rs::EventHandlerFailure::new(stringify!(#event_type), stringify!(#handler)),
+                        ).await;
+                    }
+                });
+                quote! {
+                    if (#invocation).is_err() {
+                        failed_handlers += 1;
+                        #failure_report
+                    } else {
+                        succeeded_handlers += 1;
+                    }
+                }
+            });
+            let normal_calls = handlers.iter().map(|handler| {
                 let invoker = handler_invoker_path(handler);
                 let invocation = if decorators.is_empty() {
                     quote! { #invoker(mediator, &mediator.resources, event.clone()).await }
@@ -491,7 +521,21 @@ fn generate_event_dispatch_arms(
                     quote! { let _ = #invocation; }
                 }
             });
-            quote! { #job::#variant(event) => { #(#calls)* } }
+            let mut arms = vec![quote! { #job::#variant(event) => { #(#normal_calls)* } }];
+            if include_completion {
+                arms.push(quote! {
+                    #job::#completion_variant(event, completion) => {
+                        let mut succeeded_handlers = 0;
+                        let mut failed_handlers = 0;
+                        #(#calls)*
+                        let _ = completion.send(::medi_rs::EventDispatchOutcome::new(
+                            succeeded_handlers,
+                            failed_handlers,
+                        ));
+                    }
+                });
+            }
+            arms
         })
         .collect()
 }
@@ -559,24 +603,40 @@ pub(crate) fn generate_event_support(
     config: EventDispatchConfig<'_>,
     task_spawns: &[proc_macro2::TokenStream],
 ) -> EventSupport {
-    let variants: Vec<_> = routes
-        .iter()
-        .enumerate()
-        .map(|(index, (event, _))| {
-            let variant = format_ident!("Event{index}");
-            quote! { #variant(#event) }
-        })
-        .collect();
+    let include_completion = !cfg!(feature = "embassy");
+    let mut variants = Vec::with_capacity(routes.len() * (1 + usize::from(include_completion)));
+    for (index, (event, _)) in routes.iter().enumerate() {
+        let variant = format_ident!("Event{index}");
+        variants.push(quote! { #variant(#event) });
+        if include_completion {
+            let completion_variant = format_ident!("Event{index}AndWait");
+            variants.push(quote! { #completion_variant(#event, ::medi_rs::__EventCompletionSender) });
+        }
+    }
     let publish_routes: Vec<_> = routes
         .iter()
         .enumerate()
         .map(|(index, (event, _))| {
             let variant = format_ident!("Event{index}");
+            let completion_variant = format_ident!("Event{index}AndWait");
+            let publish_and_wait_route = include_completion.then(|| quote! {
+                impl ::medi_rs::StaticPublishAndWait<#name> for #event where #event: Clone + Send + 'static {
+                    async fn publish_and_wait(self, mediator: &#name) -> ::medi_rs::Result<::medi_rs::EventDispatchOutcome> {
+                        let (completion, receiver) = ::medi_rs::__event_completion_channel();
+                        ::medi_rs::EventQueue::publish(
+                            &mediator.event_queue,
+                            #job::#completion_variant(self, completion),
+                        ).await?;
+                        receiver.await.map_err(|_| ::medi_rs::Error::EventProcessingError)
+                    }
+                }
+            });
             quote! { impl ::medi_rs::StaticPublish<#name> for #event where #event: Clone + Send + 'static {
                 fn publish(self, mediator: &#name) -> impl core::future::Future<Output = ::medi_rs::Result<()>> + Send {
                     ::medi_rs::EventQueue::publish(&mediator.event_queue, #job::#variant(self))
                 }
             }
+            #publish_and_wait_route
             impl ::medi_rs::StaticTryPublish<#name> for #event where #event: Clone + Send + 'static {
                 fn try_publish(self, mediator: &#name) -> core::result::Result<(), ::medi_rs::TryPublishError<Self>> {
                     match ::medi_rs::EventQueue::try_publish(&mediator.event_queue, #job::#variant(self.clone())) {
@@ -588,8 +648,13 @@ pub(crate) fn generate_event_support(
             } }
         })
         .collect();
-    let dispatch_arms =
-        generate_event_dispatch_arms(routes, job, config.decorators, config.event_failure_reporter.is_some());
+    let dispatch_arms = generate_event_dispatch_arms(
+        routes,
+        job,
+        config.decorators,
+        config.event_failure_reporter.is_some(),
+        include_completion,
+    );
     let worker = format_ident!("medi_rs_event_worker");
     let worker_loop = quote! {
         loop {
@@ -630,12 +695,28 @@ pub(crate) fn generate_event_support(
     });
     let start = generate_event_start(resource_tuple, &worker, task_spawns, config.hooks.startup);
     let shutdown_hooks = config.hooks.shutdown;
+    let publish_and_wait_method = include_completion.then(|| {
+        quote! {
+            /// Enqueue an event and asynchronously wait for all of its handlers to finish.
+            ///
+            /// This does not block the executor thread. The returned outcome counts
+            /// successful and failed handlers; handler failures do not stop later
+            /// handlers from running.
+            pub async fn publish_and_wait<E>(&self, event: E) -> ::medi_rs::Result<::medi_rs::EventDispatchOutcome>
+            where
+                E: ::medi_rs::StaticPublishAndWait<Self>,
+            {
+                event.publish_and_wait(self).await
+            }
+        }
+    });
     EventSupport {
         job: quote! { #[allow(non_camel_case_types)] enum #job { #(#variants,)* Shutdown } },
         field: quote! { event_queue: #queue_type, },
         publish_routes: quote! { #(#publish_routes)* },
         publish_method: quote! { /// Enqueue an event for later worker dispatch.
         pub async fn publish<E>(&self, event: E) -> ::medi_rs::Result<()> where E: ::medi_rs::StaticPublish<Self> { event.publish(self).await }
+        #publish_and_wait_method
         /// Attempt to enqueue an event without waiting for queue capacity.
         ///
         /// On failure, the returned error contains the event for retry or
