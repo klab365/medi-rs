@@ -42,7 +42,12 @@ pub fn derive_medi_stream_request(input: proc_macro::TokenStream) -> proc_macro:
 
 /// Declare a reusable mediator registration manifest owned by a Rust module.
 ///
-/// A manifest is consumed by the `medi_rs::mediator!` macro.
+/// A manifest is consumed by the `medi_rs::mediator!` macro. Use
+/// `pub manifest name;` when the manifest is composed from another crate. In
+/// that form, use `crate::` paths in the declarations; they are resolved to
+/// the defining crate when the exported manifest expands. Handler functions
+/// may remain private; only their generated, documentation-hidden invokers
+/// are public.
 #[proc_macro]
 pub fn medi_module(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     medi_module_inner(input)
