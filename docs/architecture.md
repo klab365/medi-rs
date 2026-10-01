@@ -19,7 +19,7 @@ A feature module declares a manifest:
 ```rust
 medi_module! {
     manifest users;
-    resources { UserRepository; }
+    resources { repository: UserRepository; }
     commands { CreateUser => create_user; }
     events { UserCreated => [send_welcome_email, write_audit_log]; }
 }
@@ -81,10 +81,10 @@ lease; the next lease holder clears leftover items.
 ## Resources
 
 Resources are ordinary `Clone` values, not marker-derived types. Each resource
-is listed once in `resources { ... }` and supplied to `Mediator::new` in the
-same declaration order across the composed manifests. The macro represents the
-values as a typed nested tuple and the handler invoker resolves dependencies
-through type-level tuple positions.
+is named and listed once in `resources { ... }`, then supplied through the
+generated typed builder. The macro represents the values as a typed nested
+tuple and the handler invoker resolves dependencies through type-level tuple
+positions.
 
 As a result, duplicate resources and missing dependencies fail to compile.
 Resource extraction does not use `TypeId`, a map, or allocation.

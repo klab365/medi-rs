@@ -29,7 +29,7 @@ async fn handler_three(queue: InMemoryMsgQueue, _: BaseEvent) -> Result<()> {
 
 medi_module! {
     manifest event_manifest;
-    resources { InMemoryMsgQueue; }
+    resources { queue: InMemoryMsgQueue; }
     events { BaseEvent => [handler_one, handler_two, handler_three]; }
 }
 mediator! {
@@ -88,7 +88,7 @@ mod failure_reporting {
     async fn event_failure_reporter_observes_failures_without_stopping_dispatch() {
         FAILURE_REPORTS.store(0, Ordering::Release);
         FOLLOWING_HANDLERS.store(0, Ordering::Release);
-        let mediator = Box::leak(Box::new(FailureMediator::new()));
+        let mediator = Box::leak(Box::new(FailureMediator::builder().build()));
         mediator.start().expect("mediator must start");
         mediator.publish(FailingEvent).await.unwrap();
 
@@ -105,7 +105,7 @@ mod failure_reporting {
 #[tokio::test]
 async fn publish_should_process_published_event() {
     let queue = InMemoryMsgQueue::default();
-    let mediator = Box::leak(Box::new(EventMediator::new(queue.clone())));
+    let mediator = Box::leak(Box::new(EventMediator::builder().queue(queue.clone()).build()));
     mediator.start().expect("mediator must start");
     assert_eq!(mediator.start(), Err(StartError::AlreadyStarted));
     mediator.publish(BaseEvent).await.unwrap();

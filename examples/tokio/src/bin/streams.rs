@@ -40,7 +40,7 @@ async fn search_users(
 
 medi_module! {
     manifest users_manifest;
-    resources { UserDirectory; }
+    resources { user_directory: UserDirectory; }
     streams { SearchUsers => search_users; }
 }
 
@@ -54,9 +54,11 @@ mediator! {
 
 #[tokio::main]
 async fn main() -> Result<(), SearchError> {
-    let mediator = UserMediator::new(UserDirectory {
-        users: &["Ada Lovelace", "Alan Turing", "Ada Yonath", "Grace Hopper"],
-    });
+    let mediator = UserMediator::builder()
+        .user_directory(UserDirectory {
+            users: &["Ada Lovelace", "Alan Turing", "Ada Yonath", "Grace Hopper"],
+        })
+        .build();
 
     // Recommended: `try_for_each` pins internally and returns handler errors via `?`.
     mediator

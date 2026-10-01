@@ -30,7 +30,7 @@ async fn send_welcome_email(outbox: EmailOutbox, event: UserRegistered) -> Resul
 }
 medi_module! {
     manifest events_manifest;
-    resources { EmailOutbox; }
+    resources { outbox: EmailOutbox; }
     events { UserRegistered => [send_welcome_email]; }
     startup { open_outbox; }
     shutdown { close_outbox; }
@@ -41,7 +41,7 @@ async fn main() -> Result<()> {
     let outbox = EmailOutbox {
         sent: Arc::new(Mutex::new(Vec::new())),
     };
-    let mediator = Box::leak(Box::new(EventMediator::new(outbox.clone())));
+    let mediator = Box::leak(Box::new(EventMediator::builder().outbox(outbox.clone()).build()));
     mediator.start().expect("mediator must start");
     mediator
         .publish(UserRegistered {

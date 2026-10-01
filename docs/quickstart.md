@@ -54,7 +54,7 @@ runtime. `mediator!` selects manifests and generates one concrete mediator.
 ```rust
 medi_module! {
     manifest greeting;
-    resources { GreetingPrefix; }
+    resources { prefix: GreetingPrefix; }
     commands { Greet => greet; }
 }
 
@@ -76,7 +76,7 @@ at compile time.
 ```rust
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mediator = AppMediator::new(GreetingPrefix("Hello".into()));
+    let mediator = AppMediator::builder().prefix(GreetingPrefix("Hello".into()).build());
 
     let greeting = mediator.send(Greet { name: "Rust".into() }).await?;
     assert_eq!(greeting, "Hello, Rust!");

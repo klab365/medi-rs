@@ -37,7 +37,7 @@
 //! }
 //!
 //! # async fn run() -> Result<()> {
-//! assert_eq!(AppMediator::new().send(Greet).await?, "hello");
+//! assert_eq!(AppMediator::builder().build().send(Greet).await?, "hello");
 //! # Ok(())
 //! # }
 //! ```
@@ -219,6 +219,14 @@ pub use medi_rs_macros::{
     __medi_rs_finalize_composition, MediCommand, MediStreamRequest, medi_handler, medi_module, medi_shutdown,
     medi_startup, medi_stream_handler, medi_task,
 };
+
+/// Marker used by generated mediator builders before a resource is supplied.
+#[doc(hidden)]
+pub struct MissingResource;
+
+/// Wrapper used by generated mediator builders after a resource is supplied.
+#[doc(hidden)]
+pub struct ProvidedResource<T>(pub T);
 
 /// The kind of a route in a generated mediator composition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

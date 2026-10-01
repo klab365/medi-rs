@@ -31,5 +31,5 @@ mediator! {
 
 #[test]
 fn routes_to_a_private_handler_in_a_feature_module() {
-    futures::executor::block_on(AppMediator::new().send(CreateUser)).unwrap();
+    futures::executor::block_on(AppMediator::builder().build().send(CreateUser)).unwrap();
 }

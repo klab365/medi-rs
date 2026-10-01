@@ -26,7 +26,7 @@ mediator! {
 
 #[tokio::test]
 async fn send_should_take_less_than_1ms() {
-    let mediator = LatencyMediator::new();
+    let mediator = LatencyMediator::builder().build();
     let watch = std::time::Instant::now();
     let pong = mediator.send(Ping("Ping".into())).await.unwrap();
     assert_eq!(pong, "Pong: Ping");

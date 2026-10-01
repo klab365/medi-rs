@@ -28,6 +28,6 @@ mediator! {
 
 #[tokio::test]
 async fn send_should_return_the_typed_handler_error() {
-    let error = ErrorMediator::new().send(BasicRequest).await.unwrap_err();
+    let error = ErrorMediator::builder().build().send(BasicRequest).await.unwrap_err();
     assert_eq!(error, CustomError::Basic("Error1"));
 }

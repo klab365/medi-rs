@@ -46,7 +46,7 @@ async fn print_borrowed_ping(
 
 medi_module! {
     manifest resource_manifest;
-    resources { AppState; }
+    resources { app_state: AppState; }
     commands { Ping => print_ping; }
 }
 
@@ -60,7 +60,7 @@ mediator! {
 
 medi_module! {
     manifest borrowed_resource_manifest;
-    resources { NonCloneState; }
+    resources { state: NonCloneState; }
     commands { BorrowedPing => print_borrowed_ping; }
 }
 
@@ -75,7 +75,7 @@ mediator! {
 #[tokio::test]
 async fn send_should_return_correct_value_from_the_resource() {
     let state = AppState::new();
-    let mediator = ResourceMediator::new(state.clone());
+    let mediator = ResourceMediator::builder().app_state(state.clone()).build();
     mediator.send(Ping("hello".into())).await.unwrap();
     mediator.send(Ping("world".into())).await.unwrap();
     assert_eq!(*state.list.lock().unwrap(), vec!["hello", "world"]);
@@ -83,9 +83,11 @@ async fn send_should_return_correct_value_from_the_resource() {
 
 #[tokio::test]
 async fn send_should_borrow_a_non_clone_resource() {
-    let mediator = BorrowedResourceMediator::new(NonCloneState {
-        list: Mutex::new(Vec::new()),
-    });
+    let mediator = BorrowedResourceMediator::builder()
+        .state(NonCloneState {
+            list: Mutex::new(Vec::new()),
+        })
+        .build();
 
     assert_eq!(mediator.send(BorrowedPing("hello".into())).await.unwrap(), 1);
     assert_eq!(mediator.send(BorrowedPing("world".into())).await.unwrap(), 2);

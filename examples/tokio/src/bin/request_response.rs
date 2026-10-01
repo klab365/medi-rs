@@ -22,7 +22,7 @@ mediator! {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let greeting = GreetingMediator::new().send(Greet { name: "medi-rs".into() }).await?;
+    let greeting = GreetingMediator::builder().build().send(Greet { name: "medi-rs".into() }).await?;
     println!("{greeting}");
     Ok(())
 }

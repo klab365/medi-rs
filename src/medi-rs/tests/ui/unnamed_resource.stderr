@@ -1,0 +1,5 @@
+error: resource declarations must use `name: Type`
+ --> tests/ui/unnamed_resource.rs:7:17
+  |
+7 |     resources { Database; }
+  |                 ^^^^^^^^

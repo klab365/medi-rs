@@ -35,7 +35,7 @@ mediator! {
 
 #[tokio::test]
 async fn tasks_can_publish_events_after_startup() {
-    let mediator = Box::leak(Box::new(TaskEventMediator::new()));
+    let mediator = Box::leak(Box::new(TaskEventMediator::builder().build()));
     let handled = TASK_EVENT_HANDLED.notified();
     mediator.start().expect("mediator must start");
 

@@ -16,7 +16,7 @@ medi_module! { manifest error_manifest; commands { FailingCommand => fail; } }
 mediator! { pub struct ErrorMediator { event_queue_capacity: 1; event_workers: 1; modules: [error_manifest]; } }
 #[tokio::main]
 async fn main() {
-    match ErrorMediator::new().send(FailingCommand).await {
+    match ErrorMediator::builder().build().send(FailingCommand).await {
         Ok(()) => println!("command succeeded"),
         Err(error) => println!("handler returned application error: {error}"),
     }

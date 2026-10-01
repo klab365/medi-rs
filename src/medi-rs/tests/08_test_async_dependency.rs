@@ -34,7 +34,7 @@ async fn user_created(state: State, event: UserCreated) -> Result<()> {
 
 medi_module! {
     manifest async_manifest;
-    resources { State; }
+    resources { state: State; }
     commands { CreateUser => create_user; }
     events { UserCreated => [user_created]; }
 }
@@ -49,7 +49,7 @@ mediator! {
 #[tokio::test]
 async fn send_should_work_with_async_dependency_and_event() {
     let state = State(Arc::new(Mutex::new(Vec::new())));
-    let mediator = Box::leak(Box::new(AsyncMediator::new(state.clone())));
+    let mediator = Box::leak(Box::new(AsyncMediator::builder().state(state.clone()).build()));
     mediator.start().expect("mediator must start");
     mediator.send(CreateUser { name: "John".into() }).await.unwrap();
     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;

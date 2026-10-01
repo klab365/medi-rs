@@ -89,7 +89,23 @@ fn generate_startup_spawner() -> proc_macro2::TokenStream {
 pub(crate) fn collect_resource_types(modules: &[ModuleManifest]) -> Vec<Type> {
     modules
         .iter()
-        .flat_map(|module| module.resources.iter().cloned())
+        .flat_map(|module| module.resources.iter().map(|resource| resource.resource_type.clone()))
+        .collect()
+}
+
+/// Collect generated builder method names in constructor order. Unnamed
+/// resources retain backwards compatibility and receive a stable positional name.
+pub(crate) fn collect_resource_names(modules: &[ModuleManifest]) -> Vec<Ident> {
+    modules
+        .iter()
+        .flat_map(|module| module.resources.iter())
+        .enumerate()
+        .map(|(index, resource)| {
+            resource
+                .name
+                .clone()
+                .unwrap_or_else(|| format_ident!("resource_{index}"))
+        })
         .collect()
 }
 
@@ -99,7 +115,8 @@ pub(crate) fn generate_composition_description(
     module_count: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let resources = modules.iter().flat_map(|module| &module.resources).map(|resource| {
-        quote! { stringify!(#resource) }
+        let resource_type = &resource.resource_type;
+        quote! { stringify!(#resource_type) }
     });
     let commands = modules.iter().flat_map(|module| &module.commands).map(|route| {
         let request = &route.request;
@@ -161,8 +178,7 @@ pub(crate) fn generate_constructor(
     let reporter_value = event_failure_reporter.map(|reporter| quote! { event_failure_reporter: #reporter, });
     match (resource_types.is_empty(), has_events) {
         (true, true) => quote! {
-            /// Construct a mediator with no typed resources.
-            pub fn new() -> Self {
+            fn __from_resources() -> Self {
                 #configuration_check
                 Self {
                     resources: (),
@@ -175,14 +191,12 @@ pub(crate) fn generate_constructor(
             }
         },
         (true, false) => quote! {
-            /// Construct a mediator with no typed resources.
-            pub fn new() -> Self {
+            fn __from_resources() -> Self {
                 Self { resources: (), #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
             }
         },
         (false, true) => quote! {
-            /// Construct a mediator from its declared resource values.
-            pub fn new(#(#resource_names: #resource_types),*) -> Self {
+            fn __from_resources(#(#resource_names: #resource_types),*) -> Self {
                 #configuration_check
                 Self {
                     resources: #resource_values,
@@ -195,11 +209,105 @@ pub(crate) fn generate_constructor(
             }
         },
         (false, false) => quote! {
-            /// Construct a mediator from its declared resource values.
-            pub fn new(#(#resource_names: #resource_types),*) -> Self {
+            fn __from_resources(#(#resource_names: #resource_types),*) -> Self {
                 Self { resources: #resource_values, #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
             }
         },
+    }
+}
+
+/// Generate a consuming, allocation-free resource builder for one mediator.
+pub(crate) fn generate_builder(
+    mediator: &Ident,
+    visibility: &syn::Visibility,
+    resource_types: &[Type],
+    resource_names: &[Ident],
+) -> proc_macro2::TokenStream {
+    let builder = format_ident!("{mediator}Builder");
+    if resource_types.is_empty() {
+        return quote! {
+            #[doc = "Typed builder for this mediator."]
+            #visibility struct #builder;
+
+            impl #mediator {
+                /// Start constructing this mediator.
+                pub fn builder() -> #builder { #builder }
+            }
+
+            impl #builder {
+                /// Construct the mediator.
+                pub fn build(self) -> #mediator { #mediator::__from_resources() }
+            }
+        };
+    }
+
+    let states: Vec<_> = (0..resource_types.len())
+        .map(|index| format_ident!("S{index}"))
+        .collect();
+    let fields: Vec<_> = (0..resource_types.len())
+        .map(|index| format_ident!("resource_{index}"))
+        .collect();
+    let initial_states = resource_types.iter().map(|_| quote! { ::medi_rs::MissingResource });
+    let setter_impls = resource_types.iter().enumerate().map(|(index, resource_type)| {
+        let setter = &resource_names[index];
+        let generic_states = states
+            .iter()
+            .enumerate()
+            .filter_map(|(state_index, state)| (state_index != index).then_some(state));
+        let source_states = states.iter().enumerate().map(|(state_index, state)| {
+            if state_index == index {
+                quote! { ::medi_rs::MissingResource }
+            } else {
+                quote! { #state }
+            }
+        });
+        let target_states = states.iter().enumerate().map(|(state_index, state)| {
+            if state_index == index {
+                quote! { ::medi_rs::ProvidedResource<#resource_type> }
+            } else {
+                quote! { #state }
+            }
+        });
+        let assignments = fields.iter().enumerate().map(|(field_index, field)| {
+            if field_index == index {
+                quote! { #field: ::medi_rs::ProvidedResource(value) }
+            } else {
+                quote! { #field: self.#field }
+            }
+        });
+        quote! {
+            impl<#(#generic_states),*> #builder<#(#source_states),*> {
+                #[doc = "Provide a required mediator resource."]
+                pub fn #setter(self, value: #resource_type) -> #builder<#(#target_states),*> {
+                    #builder { #(#assignments),* }
+                }
+            }
+        }
+    });
+    let provided_states = resource_types
+        .iter()
+        .map(|resource_type| quote! { ::medi_rs::ProvidedResource<#resource_type> });
+    let values = fields.iter().map(|field| quote! { self.#field.0 });
+
+    quote! {
+        #[doc = "Typed builder for this mediator."]
+        #visibility struct #builder<#(#states),*> { #(#fields: #states),* }
+
+        impl #mediator {
+            /// Start constructing this mediator.
+            pub fn builder() -> #builder<#(#initial_states),*> {
+                #builder { #(#fields: ::medi_rs::MissingResource),* }
+            }
+        }
+
+        #(#setter_impls)*
+
+        impl #builder<#(#provided_states),*> {
+            /// Construct the mediator after all declared resources are provided.
+            pub fn build(self) -> #mediator {
+                #mediator::__from_resources(#(#values),*)
+            }
+        }
     }
 }
 

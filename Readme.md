@@ -62,7 +62,7 @@ mediator! {
 }
 
 async fn run() -> Result<()> {
-    let greeting = AppMediator::new()
+    let greeting = AppMediator::builder().build()
         .send(Greet { name: "Rust".into() })
         .await?;
     assert_eq!(greeting, "Hello, Rust!");
@@ -186,7 +186,7 @@ Declare a reusable, feature-local manifest. It contains zero or more `resources`
 ```rust
 medi_module! {
     manifest users;
-    resources { UserRepository; Clock; }
+    resources { repository: UserRepository; clock: Clock; }
     commands { CreateUser => create_user; }
     streams { SearchUsers => search_users; }
     events { UserCreated => [send_welcome_email, write_audit_log]; }
@@ -206,7 +206,7 @@ fn close_repository(_mediator: &AppMediator, repository: &Repository) { /* ... *
 
 medi_module! {
     manifest storage;
-    resources { Repository; }
+    resources { repository: Repository; }
     startup { verify_repository; }
     shutdown { close_repository; }
 }
@@ -247,7 +247,7 @@ mediator! {
 
 ## Resources
 
-Resources are ordinary `Clone` values. List each resource in a module manifest, pass the values to the generated mediator constructor in declaration order, and request them as handler parameters before the command or event.
+Resources are ordinary `Clone` values. Name each resource in a module manifest and request it as a handler parameter before the command or event. `mediator!` generates a typed, order-independent builder.
 
 ```rust
 use medi_rs::{MediCommand, Result, medi_handler, medi_module, mediator};
@@ -266,7 +266,7 @@ async fn create_user(_: UserRepository, _: CreateUser) -> Result<()> {
 
 medi_module! {
     manifest users;
-    resources { UserRepository; }
+    resources { repository: UserRepository; }
     commands { CreateUser => create_user; }
 }
 
@@ -279,12 +279,12 @@ mediator! {
 }
 
 async fn run() -> Result<()> {
-    AppMediator::new(UserRepository).send(CreateUser).await?;
+    AppMediator::builder().repository(UserRepository).build().send(CreateUser).await?;
     Ok(())
 }
 ```
 
-A missing or duplicate resource is a compile-time error. Resource derive macros are not required.
+A missing or duplicate resource is a compile-time error. The generated builder's `build` method is available only after every resource is supplied. On Embassy, build the mediator normally and place the completed value in `static_cell::StaticCell` before calling `start(spawner)`. Resource derive macros are not required.
 
 ### Request-scoped data
 
@@ -354,7 +354,7 @@ async fn watch_button(mediator: &AppMediator, signal: &ShutdownSignal, board: Bo
 
 medi_module! {
     manifest buttons;
-    resources { BoardApi; }
+    resources { board: BoardApi; }
     tasks { watch_button; }
 }
 ```
@@ -443,7 +443,7 @@ medi_module! { manifest users; events { UserRegistered => [send_welcome_email]; 
 mediator! { struct AppMediator { event_queue_capacity: 16; event_workers: 1; modules: [users]; } }
 
 async fn run() -> Result<()> {
-    let mediator = Box::leak(Box::new(AppMediator::new()));
+    let mediator = Box::leak(Box::new(AppMediator::builder().build()));
     mediator.start().expect("mediator must start");
     mediator.publish(UserRegistered).await?;
     Ok(())

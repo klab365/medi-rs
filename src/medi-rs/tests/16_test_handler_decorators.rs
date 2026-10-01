@@ -67,7 +67,11 @@ async fn function_decorators_receive_and_forward_the_command() {
     CALLS.lock().unwrap().clear();
 
     assert_eq!(
-        DecoratedMediator::new().send(DecoratedCommand).await.unwrap(),
+        DecoratedMediator::builder()
+            .build()
+            .send(DecoratedCommand)
+            .await
+            .unwrap(),
         "handled"
     );
     assert_eq!(

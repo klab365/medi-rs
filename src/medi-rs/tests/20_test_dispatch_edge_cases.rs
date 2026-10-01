@@ -44,7 +44,7 @@ mod event_routing {
     #[tokio::test]
     async fn queued_events_wait_for_start_and_route_recursive_events() {
         CALLS.lock().unwrap().clear();
-        let mediator = Box::leak(Box::new(Mediator::new()));
+        let mediator = Box::leak(Box::new(Mediator::builder().build()));
 
         mediator.publish(First).await.unwrap();
         assert!(CALLS.lock().unwrap().is_empty());
@@ -94,7 +94,7 @@ mod command_decorators {
 
     medi_module! {
         manifest manifest;
-        resources { Observed; }
+        resources { observed: Observed; }
         commands { Command => handle; }
     }
     mediator! {
@@ -108,7 +108,7 @@ mod command_decorators {
     #[tokio::test]
     async fn decorators_transform_commands_and_can_skip_resource_handlers() {
         let observed = Observed(Arc::new(Mutex::new(Vec::new())));
-        let mediator = Mediator::new(observed.clone());
+        let mediator = Mediator::builder().observed(observed.clone()).build();
 
         assert_eq!(mediator.send(Command("value".into())).await.unwrap(), "prefix:value");
         assert_eq!(*observed.0.lock().unwrap(), ["prefix:value"]);

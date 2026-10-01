@@ -49,7 +49,7 @@ mediator! { pub struct ReturnMediator { event_queue_capacity: 1; event_workers: 
 
 #[tokio::test]
 async fn command_return_types_are_preserved() {
-    let mediator = ReturnMediator::new();
+    let mediator = ReturnMediator::builder().build();
     mediator.send(CreateUser).await.unwrap();
     assert_eq!(mediator.send(Greeting).await.unwrap(), "Hello");
     assert_eq!(mediator.send(UserInfoRequest).await.unwrap().id, 42);

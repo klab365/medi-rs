@@ -28,12 +28,13 @@ async fn create_user(repo: UserRepository, request: CreateUser) -> Result<()> {
     repo.save(request.name);
     Ok(())
 }
-medi_module! { manifest users_manifest; resources { UserRepository; } commands { CreateUser => create_user; } }
+medi_module! { manifest users_manifest; resources { repository: UserRepository; } commands { CreateUser => create_user; } }
 mediator! { pub struct UserMediator { event_queue_capacity: 1; event_workers: 1; modules: [users_manifest]; } }
 #[tokio::main]
 async fn main() -> Result<()> {
     let repo = UserRepository::new();
-    UserMediator::new(repo.clone())
+    UserMediator::builder().repository(repo.clone())
+        .build()
         .send(CreateUser { name: "Ada".into() })
         .await?;
     println!("stored users: {}", repo.len());

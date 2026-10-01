@@ -36,7 +36,7 @@ async fn wait_for_shutdown(signal: &ShutdownSignal) {
 
 medi_module! {
     manifest runtime_task_manifest;
-    resources { TaskState; TaskWithoutMediatorState; }
+    resources { task_state: TaskState; task_without_mediator_state: TaskWithoutMediatorState; }
     tasks { initialize; initialize_without_mediator; wait_for_shutdown; }
 }
 
@@ -58,7 +58,7 @@ mod start_once {
 
     medi_module! {
         manifest start_once_manifest;
-        resources { StartOnceState; }
+        resources { state: StartOnceState; }
         tasks { count_start; }
     }
 
@@ -76,10 +76,12 @@ mod start_once {
 async fn tokio_starts_registered_tasks_with_resources() {
     TASK_STARTED.store(0, Ordering::Release);
     TASK_WITHOUT_MEDIATOR_STARTED.store(0, Ordering::Release);
-    let mediator = Box::leak(Box::new(RuntimeTaskMediator::new(
-        TaskState(&TASK_STARTED),
-        TaskWithoutMediatorState(&TASK_WITHOUT_MEDIATOR_STARTED),
-    )));
+    let mediator = Box::leak(Box::new(
+        RuntimeTaskMediator::builder()
+            .task_state(TaskState(&TASK_STARTED))
+            .task_without_mediator_state(TaskWithoutMediatorState(&TASK_WITHOUT_MEDIATOR_STARTED))
+            .build(),
+    ));
     mediator.start().expect("mediator must start");
 
     tokio::task::yield_now().await;
@@ -90,9 +92,11 @@ async fn tokio_starts_registered_tasks_with_resources() {
 #[tokio::test]
 async fn tokio_start_is_once_only() {
     START_ONCE.store(0, Ordering::Release);
-    let mediator = Box::leak(Box::new(start_once::StartOnceMediator::new(StartOnceState(
-        &START_ONCE,
-    ))));
+    let mediator = Box::leak(Box::new(
+        start_once::StartOnceMediator::builder()
+            .state(StartOnceState(&START_ONCE))
+            .build(),
+    ));
 
     assert!(!mediator.is_started());
     assert_eq!(mediator.start(), Ok(()));
@@ -106,10 +110,12 @@ async fn tokio_start_is_once_only() {
 #[tokio::test]
 async fn shutdown_signals_runtime_tasks() {
     TASK_STOPPED.store(0, Ordering::Release);
-    let mediator = Box::leak(Box::new(RuntimeTaskMediator::new(
-        TaskState(&TASK_STARTED),
-        TaskWithoutMediatorState(&TASK_WITHOUT_MEDIATOR_STARTED),
-    )));
+    let mediator = Box::leak(Box::new(
+        RuntimeTaskMediator::builder()
+            .task_state(TaskState(&TASK_STARTED))
+            .task_without_mediator_state(TaskWithoutMediatorState(&TASK_WITHOUT_MEDIATOR_STARTED))
+            .build(),
+    ));
     mediator.start().expect("mediator must start");
     mediator.shutdown().await.unwrap();
     assert_eq!(TASK_STOPPED.load(Ordering::Acquire), 1);

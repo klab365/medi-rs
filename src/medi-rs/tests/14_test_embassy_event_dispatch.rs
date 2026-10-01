@@ -62,7 +62,7 @@ async fn receives_spawner(spawner: SendSpawner) {
 
 medi_module! {
     manifest embassy_manifest;
-    resources { TaskState; SendSpawner; }
+    resources { task_state: TaskState; send_spawner: SendSpawner; }
     events { EventObserved => [observe_event]; }
     tasks { initialize_board; receives_spawner; }
     startup { initialize_startup_task; }
@@ -83,10 +83,12 @@ fn embassy_queue_honors_the_generated_capacity() {
     thread::spawn(move || {
         let executor = Box::leak(Box::new(embassy_executor::Executor::new()));
         executor.run(|spawner| {
-            let mediator = Box::leak(Box::new(EmbassyTestMediator::new(
-                TaskState(&TASK_STARTED),
-                spawner.make_send(),
-            )));
+            let mediator = Box::leak(Box::new(
+                EmbassyTestMediator::builder()
+                    .task_state(TaskState(&TASK_STARTED))
+                    .send_spawner(spawner.make_send())
+                    .build(),
+            ));
             futures::executor::block_on(mediator.publish(EventObserved(1))).expect("first event must fit");
             futures::executor::block_on(async {
                 let publish = mediator.publish(EventObserved(2));
@@ -109,10 +111,12 @@ fn embassy_worker_dispatches_published_events() {
     thread::spawn(move || {
         let executor = Box::leak(Box::new(embassy_executor::Executor::new()));
         executor.run(|spawner| {
-            let mediator = Box::leak(Box::new(EmbassyTestMediator::new(
-                TaskState(&TASK_STARTED),
-                spawner.make_send(),
-            )));
+            let mediator = Box::leak(Box::new(
+                EmbassyTestMediator::builder()
+                    .task_state(TaskState(&TASK_STARTED))
+                    .send_spawner(spawner.make_send())
+                    .build(),
+            ));
             let mediator_for_test: &'static EmbassyTestMediator = mediator;
             assert!(!mediator.is_started());
             mediator.start(spawner).expect("mediator must start");
