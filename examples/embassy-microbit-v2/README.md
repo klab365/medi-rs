@@ -2,7 +2,32 @@
 
 This example runs a static `mediator!` on a BBC micro:bit v2 (`nRF52833`) with
 the `embassy` adapter. It uses `StaticCell` for the generated mediator and no
-allocator or `extern crate alloc`.
+allocator or `extern crate alloc`. It is a hardware-specific end-to-end example,
+not a minimal host-side quick start; for the core Embassy setup, see the
+[setup summary](#mediator-setup).
+
+## Mediator setup
+
+The application provides its resources to the generated builder, stores the
+completed mediator in static memory, then starts its workers with Embassy's
+`Spawner`:
+
+```rust,ignore
+static MEDIATOR: StaticCell<AppMediator> = StaticCell::new();
+
+let mediator = MEDIATOR.init(
+    AppMediator::builder()
+        .board(board)
+        .button(button)
+        .build(),
+);
+mediator.start(spawner)?;
+```
+
+The `StaticCell` gives the mediator the `'static` lifetime required by Embassy
+tasks. `start(spawner)` starts the generated event workers and registered
+tasks; it does not create OS threads. Resource setter names come from the
+resource declarations in the mediator's selected manifests.
 
 `main.rs` bootstraps the concrete `EmbassyBoard` GPIO implementation and injects
 it as the `BoardApi` resource. Its `#[medi_startup]` hook receives the temporary

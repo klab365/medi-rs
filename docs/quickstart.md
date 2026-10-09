@@ -87,10 +87,37 @@ async fn main() -> Result<()> {
 `send` calls the generated route directly. There is no runtime handler registry
 or type-based resource lookup.
 
+## Testing a handler
+
+For Tokio event handlers, `publish_and_wait` waits until dispatch completes, so
+there is no need to synchronize a test with sleeps or polling:
+
+```rust
+let outcome = mediator.publish_and_wait(MyEvent).await?;
+assert_eq!(outcome.succeeded_handlers(), 1);
+assert_eq!(outcome.failed_handlers(), 0);
+```
+
+Here `mediator` is a mediator with an event route, built with the Tokio or Wasm
+adapter.
+
+Use this when the test needs to assert handler effects. Ordinary `publish` only
+confirms that the event was accepted by the queue. `publish_and_wait` is
+available on Tokio and Wasm, not Embassy.
+
+## Choosing a runtime and examples
+
+- **Tokio**: hosted applications; start with this quick start and the
+  [runnable Tokio examples](../examples/tokio/README.md).
+- **Embassy**: `no_std` embedded applications; the
+  [micro:bit v2 example](../examples/embassy-microbit-v2/README.md) shows static
+  mediator storage, resource injection, and `start(spawner)`.
+- **Wasm**: browser applications; see the [Wasm example](../examples/wasm/README.md).
+
 ## Next steps
 
 - Read the [architecture overview](architecture.md) for the composition model.
 - See the root [README](../README.md) for events, streams, decorators, lifecycle
   hooks, and runtime tasks.
-- Run the [Tokio examples](../examples/tokio/) for executable command, resource,
-  event, and stream examples.
+- Run the [Tokio examples](../examples/tokio/README.md) for executable command,
+  resource, event, and stream examples.
