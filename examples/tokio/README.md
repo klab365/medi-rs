@@ -1,6 +1,10 @@
 # Tokio examples
 
-Runnable examples using the Tokio adapter:
+Runnable examples using the Tokio adapter. They cover commands and resources,
+events, tasks, streams, and custom handler errors. For the complete route
+setup and execution model, see the [quick start](../../docs/quickstart.md).
+
+## Run one example
 
 ```sh
 cargo run --manifest-path examples/tokio/Cargo.toml --bin request_response
