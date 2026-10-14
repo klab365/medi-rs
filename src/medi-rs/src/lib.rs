@@ -110,18 +110,21 @@ pub use embassy_executor::SendSpawner;
 /// listed decorator function to every command and event handler route.
 /// `event_failure_reporter: reporter;` observes failed event handlers without
 /// changing delivery to the remaining handlers.
+/// Module entries may use `#[cfg(...)]`, for example
+/// `modules: [core, #[cfg(feature = "extras")] extras];`.
+/// Disabled modules are not resolved; an empty module list is also supported.
 #[macro_export]
 macro_rules! mediator {
     (
         $vis:vis struct $name:ident {
             event_queue_capacity: $capacity:expr;
             event_workers: $workers:expr;
-            modules: [$first:ident $(, $rest:ident)* $(,)?];
+            modules: [$($(#[cfg($condition:meta)])* $module:ident),* $(,)?];
             $(decorators: [$($decorators:path),* $(,)?];)?
             $(event_failure_reporter: $reporter:ty;)?
         }
     ) => {
-        $first!($crate::__medi_rs_collect_modules, {
+        $crate::__medi_rs_collect_modules! {
             $vis struct $name;
             event_queue_capacity: $capacity;
             event_workers: $workers;
@@ -129,9 +132,8 @@ macro_rules! mediator {
             decorators: [$($($decorators),*)?];
             event_failure_reporter: [$($reporter)?];
             count: [];
-            remaining: [$($rest),*];
-
-        });
+            remaining: [$($(#[cfg($condition)])* $module,)*];
+        }
     };
 }
 
@@ -167,8 +169,9 @@ macro_rules! __medi_rs_collect_modules {
         decorators: [$($decorators:path),*];
         event_failure_reporter: [$($reporter:ty)?];
         count: [$($count:tt)*];
-        remaining: [$next:ident $(, $rest:ident)*];
+        remaining: [$(#[cfg($condition:meta)])* $next:ident, $($rest:tt)*];
     ) => {
+        #[cfg(all($($condition),*))]
         $next!($crate::__medi_rs_collect_modules, {
             $vis struct $name;
             event_queue_capacity: $capacity;
@@ -177,8 +180,19 @@ macro_rules! __medi_rs_collect_modules {
             decorators: [$($decorators),*];
             event_failure_reporter: [$($reporter)?];
             count: [$($count)*];
-            remaining: [$($rest),*];
+            remaining: [$($rest)*];
         });
+        #[cfg(not(all($($condition),*)))]
+        $crate::__medi_rs_collect_modules! {
+            $vis struct $name;
+            event_queue_capacity: $capacity;
+            event_workers: $workers;
+            modules: [$($modules)*];
+            decorators: [$($decorators),*];
+            event_failure_reporter: [$($reporter)?];
+            count: [$($count)*];
+            remaining: [$($rest)*];
+        }
     };
 }
 

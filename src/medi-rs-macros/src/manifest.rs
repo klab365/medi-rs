@@ -309,7 +309,7 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                 decorators: [$($decorators:path),*];
                 event_failure_reporter: [$($reporter:ty)?];
                 count: [$($count:tt)*];
-                remaining: [$($remaining:ident),*];
+                remaining: [$($remaining:tt)*];
             }) => {
                 $callback! {
                     $vis struct $name;
@@ -327,7 +327,7 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                     decorators: [$($decorators),*];
                     event_failure_reporter: [$($reporter)?];
                     count: [$($count)* (),];
-                    remaining: [$($remaining),*];
+                    remaining: [$($remaining)*];
                 }
             };
         }
