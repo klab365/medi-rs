@@ -572,6 +572,18 @@ fn generate_event_dispatch_arms(
         .collect()
 }
 
+fn generate_startup_hook_guard(startup_hooks: &[proc_macro2::TokenStream]) -> proc_macro2::TokenStream {
+    quote! {
+        if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
+            #(#startup_hooks)*
+            Ok(())
+        })() {
+            self.lifecycle.abort_start();
+            return Err(error);
+        }
+    }
+}
+
 fn generate_event_start(
     resource_tuple: &proc_macro2::TokenStream,
     worker: &Ident,
@@ -579,6 +591,7 @@ fn generate_event_start(
     startup_hooks: &[proc_macro2::TokenStream],
 ) -> proc_macro2::TokenStream {
     let startup_spawner = generate_startup_spawner();
+    let startup_hook_guard = generate_startup_hook_guard(startup_hooks);
     if cfg!(feature = "embassy") {
         quote! {
             /// Start generated Embassy event workers and registered runtime tasks.
@@ -591,13 +604,7 @@ fn generate_event_start(
                 }
                 self.lifecycle.start()?;
                 #startup_spawner
-                if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
-                    #(#startup_hooks)*
-                    Ok(())
-                })() {
-                    self.lifecycle.abort_start();
-                    return Err(error);
-                }
+                #startup_hook_guard
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
                     self.lifecycle.begin();
@@ -623,13 +630,7 @@ fn generate_event_start(
                 }
                 self.lifecycle.start()?;
                 #startup_spawner
-                if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
-                    #(#startup_hooks)*
-                    Ok(())
-                })() {
-                    self.lifecycle.abort_start();
-                    return Err(error);
-                }
+                #startup_hook_guard
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
                     self.lifecycle.begin();
@@ -811,6 +812,7 @@ pub(crate) fn generate_task_only_start(
     let startup_hooks = hooks.startup;
     let shutdown_hooks = hooks.shutdown;
     let startup_spawner = generate_startup_spawner();
+    let startup_hook_guard = generate_startup_hook_guard(startup_hooks);
     if cfg!(feature = "embassy") {
         quote! { impl #name {
             /// Start the registered Embassy tasks.
@@ -820,13 +822,7 @@ pub(crate) fn generate_task_only_start(
             pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 self.lifecycle.start()?;
                 #startup_spawner
-                if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
-                    #(#startup_hooks)*
-                    Ok(())
-                })() {
-                    self.lifecycle.abort_start();
-                    return Err(error);
-                }
+                #startup_hook_guard
                 #(#task_spawns)*
                 Ok(())
             }
@@ -852,13 +848,7 @@ pub(crate) fn generate_task_only_start(
             pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 self.lifecycle.start()?;
                 #startup_spawner
-                if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
-                    #(#startup_hooks)*
-                    Ok(())
-                })() {
-                    self.lifecycle.abort_start();
-                    return Err(error);
-                }
+                #startup_hook_guard
                 #(#task_spawns)*
                 Ok(())
             }
