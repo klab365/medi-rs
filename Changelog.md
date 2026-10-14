@@ -2,6 +2,12 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## [3.0.1](https://github.com/klab365/medi-rs/compare/medi-rs-v3.0.0...medi-rs-v3.0.1) - 2026-10-14
+
+### Fixed
+
+- harden mediator lifecycle and configuration
+
 ## [3.0.0](https://github.com/klab365/medi-rs/compare/medi-rs-v2.6.0...medi-rs-v3.0.0) - 2026-10-01
 
 ### Added
