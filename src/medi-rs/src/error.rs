@@ -8,6 +8,8 @@
 pub enum StartError {
     /// The mediator has already started its generated workers and tasks.
     AlreadyStarted,
+    /// The configured event worker count was zero.
+    InvalidEventWorkerCount,
     /// A startup hook returned an error.
     ///
     /// The hook name identifies the failed initialization step. Startup hooks
@@ -63,3 +65,10 @@ pub enum Error {
 
 /// Framework result used by event publishing and queue operations.
 pub type Result<T> = core::result::Result<T, Error>;
+
+/// Error returned when constructing a mediator with invalid configuration.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum BuildError {
+    /// The configured event queue capacity was zero.
+    InvalidEventQueueCapacity,
+}

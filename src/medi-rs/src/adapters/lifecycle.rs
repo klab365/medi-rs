@@ -41,6 +41,11 @@ impl Lifecycle {
             .map_err(|_| StartError::AlreadyStarted)
     }
 
+    /// Undo a start attempt that failed before any worker or task was spawned.
+    pub fn abort_start(&self) {
+        self.started.store(false, Ordering::Release);
+    }
+
     /// Return whether the mediator has been started.
     pub fn is_started(&self) -> bool {
         self.started.load(Ordering::Acquire)

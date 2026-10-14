@@ -18,9 +18,11 @@ mod zero_capacity {
     mediator! { struct Mediator { event_queue_capacity: 0; event_workers: 1; modules: [manifest]; } }
 
     #[test]
-    #[should_panic(expected = "event_queue_capacity must be greater than zero")]
-    fn constructor_rejects_zero_queue_capacity() {
-        let _ = Mediator::builder().build();
+    fn try_build_rejects_zero_queue_capacity() {
+        assert!(matches!(
+            Mediator::builder().try_build(),
+            Err(medi_rs::BuildError::InvalidEventQueueCapacity)
+        ));
     }
 }
 
@@ -40,10 +42,10 @@ mod zero_workers {
     mediator! { struct Mediator { event_queue_capacity: 1; event_workers: ZERO_WORKERS; modules: [manifest]; } }
 
     #[test]
-    #[should_panic(expected = "event_workers must be greater than zero")]
     fn start_rejects_zero_workers() {
         let mediator = Box::leak(Box::new(Mediator::builder().build()));
-        mediator.start().expect("mediator must start");
+        assert_eq!(mediator.start(), Err(medi_rs::StartError::InvalidEventWorkerCount));
+        assert!(!mediator.is_started());
     }
 }
 
