@@ -23,12 +23,12 @@ The runtime features are mutually exclusive. Command-only mediators need no runt
 
 ```toml
 [dependencies]
-medi-rs = { version = "1", features = ["tokio"] }
+medi-rs = { version = "3", features = ["tokio"] }
 ```
 
 ## Event configuration
 
-Event mediators use a bounded queue. `event_queue_capacity` and `event_workers` must both be greater than zero. `publish` waits while the queue is full; `try_publish` never waits and returns the event when the queue is full or closed. Tokio and WebAssembly accept any `usize` expression for the capacity. Embassy uses the capacity as a const generic, so its value must be a const expression such as a literal or named `const`.
+Event mediators use a bounded queue. `event_queue_capacity` and `event_workers` must both be greater than zero. Use the generated `try_build` method to receive an invalid queue capacity as `BuildError`; `start` returns `StartError::InvalidEventWorkerCount` for an invalid worker count. `publish` waits while the queue is full; `try_publish` never waits and returns the event when the queue is full or closed. Tokio and WebAssembly accept any `usize` expression for the capacity. Embassy uses the capacity as a const generic, so its value must be a const expression such as a literal or named `const`.
 
 ## Quick start
 

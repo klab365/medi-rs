@@ -12,7 +12,7 @@ adapter:
 
 ```toml
 [dependencies]
-medi-rs = { version = "2", features = ["tokio"] }
+medi-rs = { version = "3", features = ["tokio"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
@@ -67,16 +67,17 @@ mediator! {
 }
 ```
 
-The resource order in the selected manifests is the argument order of `new`.
-A missing resource, duplicate resource, or duplicate command route is rejected
-at compile time.
+The generated builder accepts named resources in any order. A missing resource,
+duplicate resource, or duplicate command route is rejected at compile time.
 
 ## 4. Send the command
 
 ```rust
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mediator = AppMediator::builder().prefix(GreetingPrefix("Hello".into()).build());
+    let mediator = AppMediator::builder()
+        .prefix(GreetingPrefix("Hello".into()))
+        .build();
 
     let greeting = mediator.send(Greet { name: "Rust".into() }).await?;
     assert_eq!(greeting, "Hello, Rust!");
@@ -84,8 +85,10 @@ async fn main() -> Result<()> {
 }
 ```
 
-`send` calls the generated route directly. There is no runtime handler registry
-or type-based resource lookup.
+`try_build` reports invalid event configuration as a typed error; `build` is
+also available when configuration is known to be valid. `send` calls the
+generated route directly. There is no runtime handler registry or type-based
+resource lookup.
 
 ## Testing a handler
 

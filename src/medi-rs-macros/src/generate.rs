@@ -175,8 +175,24 @@ pub(crate) fn generate_constructor(
     let configuration_check = quote! {
         assert!(#capacity > 0, "event_queue_capacity must be greater than zero");
     };
+    let configuration_validation = if has_events {
+        quote! {
+            fn __validate_configuration() -> core::result::Result<(), ::medi_rs::BuildError> {
+                if #capacity == 0 {
+                    return Err(::medi_rs::BuildError::InvalidEventQueueCapacity);
+                }
+                Ok(())
+            }
+        }
+    } else {
+        quote! {
+            fn __validate_configuration() -> core::result::Result<(), ::medi_rs::BuildError> {
+                Ok(())
+            }
+        }
+    };
     let reporter_value = event_failure_reporter.map(|reporter| quote! { event_failure_reporter: #reporter, });
-    match (resource_types.is_empty(), has_events) {
+    let constructor = match (resource_types.is_empty(), has_events) {
         (true, true) => quote! {
             fn __from_resources() -> Self {
                 #configuration_check
@@ -213,6 +229,10 @@ pub(crate) fn generate_constructor(
                 Self { resources: #resource_values, #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
             }
         },
+    };
+    quote! {
+        #configuration_validation
+        #constructor
     }
 }
 
@@ -237,6 +257,12 @@ pub(crate) fn generate_builder(
             impl #builder {
                 /// Construct the mediator.
                 pub fn build(self) -> #mediator { #mediator::__from_resources() }
+
+                /// Construct the mediator, returning invalid configuration as a typed error.
+                pub fn try_build(self) -> core::result::Result<#mediator, ::medi_rs::BuildError> {
+                    #mediator::__validate_configuration()?;
+                    Ok(#mediator::__from_resources())
+                }
             }
         };
     }
@@ -287,7 +313,7 @@ pub(crate) fn generate_builder(
     let provided_states = resource_types
         .iter()
         .map(|resource_type| quote! { ::medi_rs::ProvidedResource<#resource_type> });
-    let values = fields.iter().map(|field| quote! { self.#field.0 });
+    let values: Vec<_> = fields.iter().map(|field| quote! { self.#field.0 }).collect();
 
     quote! {
         #[doc = "Typed builder for this mediator."]
@@ -306,6 +332,12 @@ pub(crate) fn generate_builder(
             /// Construct the mediator after all declared resources are provided.
             pub fn build(self) -> #mediator {
                 #mediator::__from_resources(#(#values),*)
+            }
+
+            /// Construct the mediator, returning invalid configuration as a typed error.
+            pub fn try_build(self) -> core::result::Result<#mediator, ::medi_rs::BuildError> {
+                #mediator::__validate_configuration()?;
+                Ok(#mediator::__from_resources(#(#values),*))
             }
         }
     }
@@ -554,10 +586,18 @@ fn generate_event_start(
             /// Returns [`::medi_rs::StartError::AlreadyStarted`] without
             /// spawning work when this mediator was already started.
             pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
-                assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
+                if Self::EVENT_WORKERS == 0 {
+                    return Err(::medi_rs::StartError::InvalidEventWorkerCount);
+                }
                 self.lifecycle.start()?;
                 #startup_spawner
-                #(#startup_hooks)*
+                if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
+                    #(#startup_hooks)*
+                    Ok(())
+                })() {
+                    self.lifecycle.abort_start();
+                    return Err(error);
+                }
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
                     self.lifecycle.begin();
@@ -578,10 +618,18 @@ fn generate_event_start(
             /// Returns [`::medi_rs::StartError::AlreadyStarted`] without
             /// spawning work when this mediator was already started.
             pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
-                assert!(Self::EVENT_WORKERS > 0, "event_workers must be greater than zero");
+                if Self::EVENT_WORKERS == 0 {
+                    return Err(::medi_rs::StartError::InvalidEventWorkerCount);
+                }
                 self.lifecycle.start()?;
                 #startup_spawner
-                #(#startup_hooks)*
+                if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
+                    #(#startup_hooks)*
+                    Ok(())
+                })() {
+                    self.lifecycle.abort_start();
+                    return Err(error);
+                }
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
                     self.lifecycle.begin();
@@ -772,7 +820,13 @@ pub(crate) fn generate_task_only_start(
             pub fn start(&'static self, spawner: ::medi_rs::embassy_executor::Spawner) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 self.lifecycle.start()?;
                 #startup_spawner
-                #(#startup_hooks)*
+                if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
+                    #(#startup_hooks)*
+                    Ok(())
+                })() {
+                    self.lifecycle.abort_start();
+                    return Err(error);
+                }
                 #(#task_spawns)*
                 Ok(())
             }
@@ -798,7 +852,13 @@ pub(crate) fn generate_task_only_start(
             pub fn start(&'static self) -> core::result::Result<(), ::medi_rs::StartError> where #resource_tuple: Sync {
                 self.lifecycle.start()?;
                 #startup_spawner
-                #(#startup_hooks)*
+                if let Err(error) = (|| -> core::result::Result<(), ::medi_rs::StartError> {
+                    #(#startup_hooks)*
+                    Ok(())
+                })() {
+                    self.lifecycle.abort_start();
+                    return Err(error);
+                }
                 #(#task_spawns)*
                 Ok(())
             }

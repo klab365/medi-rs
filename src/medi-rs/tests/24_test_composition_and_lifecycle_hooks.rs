@@ -104,4 +104,9 @@ fn startup_hook_errors_are_returned_from_start() {
         mediator.start(),
         Err(medi_rs::StartError::StartupHookFailed { hook: "reject_startup" })
     );
+    assert!(!mediator.is_started());
+    assert_eq!(
+        mediator.start(),
+        Err(medi_rs::StartError::StartupHookFailed { hook: "reject_startup" })
+    );
 }
