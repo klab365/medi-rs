@@ -2,6 +2,12 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## [3.1.0](https://github.com/klab365/medi-rs/compare/medi-rs-v3.0.1...medi-rs-v3.1.0) - 2026-10-14
+
+### Added
+
+- support cfg-gated mediator modules
+
 ## [3.0.1](https://github.com/klab365/medi-rs/compare/medi-rs-v3.0.0...medi-rs-v3.0.1) - 2026-10-14
 
 ### Fixed
