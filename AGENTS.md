@@ -34,6 +34,7 @@ If you change public documentation or examples, also verify the examples compile
 - Document new public traits, structs, methods, and derive macros.
 - Keep runtime behavior changes separate from mechanical refactors.
 - Add or update tests for every behavior change.
+- Use Conventional Commits for every commit (for example, `feat: add resource injection`).
 
 ## Module notes
 

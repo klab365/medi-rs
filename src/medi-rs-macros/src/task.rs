@@ -31,7 +31,10 @@ fn typed_arguments(function: &ItemFn) -> Vec<&Type> {
 
 fn split_parameters<'a>(arguments: Vec<&'a Type>) -> TaskParameters<'a> {
     let (context, remaining) = match arguments.first() {
-        Some(Type::Reference(reference)) if !is_shutdown_signal(arguments[0]) => {
+        Some(Type::Reference(reference))
+            if !is_shutdown_signal(arguments[0])
+                && matches!(reference.elem.as_ref(), Type::Path(path) if path.path.segments.last().is_some_and(|segment| segment.ident.to_string().ends_with("Mediator"))) =>
+        {
             (Some(reference.elem.as_ref()), arguments[1..].to_vec())
         }
         _ => (None, arguments),
@@ -86,12 +89,28 @@ pub fn medi_task_inner(attribute: proc_macro::TokenStream, input: proc_macro::To
     let indexes: Vec<Ident> = (0..parameters.resources.len())
         .map(|index| format_ident!("I{index}"))
         .collect();
-    let call_arguments = parameters.resources.iter().zip(&indexes).map(|(resource, index)| {
-        quote! { ::medi_rs::tlist::get::<#resource, #index, R>(resources), }
-    });
-    let resource_bounds = parameters.resources.iter().zip(&indexes).map(|(resource, index)| {
-        quote! { R: ::medi_rs::tlist::Get<#resource, #index>, }
-    });
+    let call_arguments = parameters
+        .resources
+        .iter()
+        .zip(&indexes)
+        .map(|(resource, index)| match resource {
+            Type::Reference(reference) => {
+                let resource = &reference.elem;
+                quote! { ::medi_rs::tlist::get_ref::<#resource, #index, R>(resources), }
+            }
+            _ => quote! { ::medi_rs::tlist::get::<#resource, #index, R>(resources), },
+        });
+    let resource_bounds = parameters
+        .resources
+        .iter()
+        .zip(&indexes)
+        .map(|(resource, index)| match resource {
+            Type::Reference(reference) => {
+                let resource = &reference.elem;
+                quote! { R: ::medi_rs::tlist::GetRef<#resource, #index>, }
+            }
+            _ => quote! { R: ::medi_rs::tlist::Get<#resource, #index>, },
+        });
     let mediator_parameter = match parameters.context {
         Some(context) => quote! { mediator: &#context, },
         None => quote! { _mediator: &M, },
