@@ -10,11 +10,14 @@ struct TaskState(&'static AtomicU32);
 #[derive(Clone, Copy)]
 struct TaskWithoutMediatorState(&'static AtomicU32);
 
+struct BorrowedTaskState(&'static AtomicU32);
+
 #[derive(Clone, Copy)]
 struct StartOnceState(&'static AtomicU32);
 
 static TASK_STARTED: AtomicU32 = AtomicU32::new(0);
 static TASK_WITHOUT_MEDIATOR_STARTED: AtomicU32 = AtomicU32::new(0);
+static TASK_BORROWED_STARTED: AtomicU32 = AtomicU32::new(0);
 static TASK_STOPPED: AtomicU32 = AtomicU32::new(0);
 static START_ONCE: AtomicU32 = AtomicU32::new(0);
 
@@ -29,6 +32,11 @@ async fn initialize_without_mediator(state: TaskWithoutMediatorState) {
 }
 
 #[medi_task]
+async fn initialize_borrowed(state: &BorrowedTaskState) {
+    state.0.store(1, Ordering::Release);
+}
+
+#[medi_task]
 async fn wait_for_shutdown(signal: &ShutdownSignal) {
     signal.cancelled().await;
     TASK_STOPPED.store(1, Ordering::Release);
@@ -36,8 +44,8 @@ async fn wait_for_shutdown(signal: &ShutdownSignal) {
 
 medi_module! {
     manifest runtime_task_manifest;
-    resources { task_state: TaskState; task_without_mediator_state: TaskWithoutMediatorState; }
-    tasks { initialize; initialize_without_mediator; wait_for_shutdown; }
+    resources { task_state: TaskState; task_without_mediator_state: TaskWithoutMediatorState; borrowed_state: BorrowedTaskState; }
+    tasks { initialize; initialize_without_mediator; initialize_borrowed; wait_for_shutdown; }
 }
 
 mediator! {
@@ -76,10 +84,12 @@ mod start_once {
 async fn tokio_starts_registered_tasks_with_resources() {
     TASK_STARTED.store(0, Ordering::Release);
     TASK_WITHOUT_MEDIATOR_STARTED.store(0, Ordering::Release);
+    TASK_BORROWED_STARTED.store(0, Ordering::Release);
     let mediator = Box::leak(Box::new(
         RuntimeTaskMediator::builder()
             .task_state(TaskState(&TASK_STARTED))
             .task_without_mediator_state(TaskWithoutMediatorState(&TASK_WITHOUT_MEDIATOR_STARTED))
+            .borrowed_state(BorrowedTaskState(&TASK_BORROWED_STARTED))
             .build(),
     ));
     mediator.start().expect("mediator must start");
@@ -87,6 +97,7 @@ async fn tokio_starts_registered_tasks_with_resources() {
     tokio::task::yield_now().await;
     assert_eq!(TASK_STARTED.load(Ordering::Acquire), 1);
     assert_eq!(TASK_WITHOUT_MEDIATOR_STARTED.load(Ordering::Acquire), 1);
+    assert_eq!(TASK_BORROWED_STARTED.load(Ordering::Acquire), 1);
 }
 
 #[tokio::test]
@@ -114,6 +125,7 @@ async fn shutdown_signals_runtime_tasks() {
         RuntimeTaskMediator::builder()
             .task_state(TaskState(&TASK_STARTED))
             .task_without_mediator_state(TaskWithoutMediatorState(&TASK_WITHOUT_MEDIATOR_STARTED))
+            .borrowed_state(BorrowedTaskState(&TASK_BORROWED_STARTED))
             .build(),
     ));
     mediator.start().expect("mediator must start");
