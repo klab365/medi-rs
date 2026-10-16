@@ -1,23 +1,29 @@
 #![cfg(feature = "tokio")]
 
-use medi_rs::{MediCommand, Result, medi_handler, medi_module, mediator};
+use core::convert::Infallible;
+use medi_rs::{MediCommand, MediContext, medi_module, mediator};
 use std::sync::Arc;
 
-#[derive(MediCommand)]
-#[medi_command(return_type = Pong, error_type = medi_rs::Error)]
+#[derive(Debug, MediCommand)]
+#[medi_command(return_type = Pong, error_type = Infallible)]
 struct Ping(String);
 
 #[derive(Debug)]
 struct Pong(String);
 
-#[medi_handler]
-async fn print_ping(id: Ping) -> Result<Pong> {
-    Ok(Pong(format!("Pong: {}", id.0)))
+struct PingModule;
+
+impl PingModule {
+    async fn print_ping(&mut self, _context: &MediContext<'_, PingMediator>, ping: Ping) -> Result<Pong, Infallible> {
+        Ok(Pong(format!("Pong: {}", ping.0)))
+    }
 }
 
 medi_module! {
     manifest ping_manifest;
-    commands { Ping => print_ping; }
+    module PingModule;
+    mailbox_capacity: 128;
+    commands { Ping => PingModule::print_ping; }
 }
 
 mediator! {
@@ -28,23 +34,32 @@ mediator! {
     }
 }
 
+fn new_mediator() -> &'static PingMediator {
+    let mediator = Box::leak(Box::new(PingMediator::builder().ping_module(PingModule).build()));
+    mediator.start().expect("actor worker starts");
+    mediator
+}
+
 #[tokio::test]
 async fn send_should_return_correct_pong() {
-    let mediator = PingMediator::builder().build();
+    let mediator = new_mediator();
     let pong = mediator.send(Ping("Ping".into())).await.unwrap();
     assert_eq!(pong.0, "Pong: Ping");
+    mediator.shutdown().await.expect("actor worker shuts down");
 }
 
 #[tokio::test]
 async fn send_should_return_correct_multiple_pong_without_multithreading() {
-    let mediator = PingMediator::builder().build();
+    let mediator = new_mediator();
     assert_eq!(mediator.send(Ping("Ping".into())).await.unwrap().0, "Pong: Ping");
     assert_eq!(mediator.send(Ping("Ping2".into())).await.unwrap().0, "Pong: Ping2");
+    mediator.shutdown().await.expect("actor worker shuts down");
 }
 
 #[tokio::test]
 async fn send_should_return_correct_return_values_when_multithreading() {
-    let mediator = Arc::new(PingMediator::builder().build());
+    let mediator = new_mediator();
+    let mediator = Arc::new(mediator);
     let mut handlers = vec![];
     for i in 0..100 {
         let mediator = Arc::clone(&mediator);
@@ -56,4 +71,5 @@ async fn send_should_return_correct_return_values_when_multithreading() {
     for handler in handlers {
         handler.await.unwrap();
     }
+    mediator.shutdown().await.expect("actor worker shuts down");
 }

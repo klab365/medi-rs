@@ -1,9 +1,5 @@
-use gloo_timers::future::TimeoutFuture;
-use medi_rs::stream::TryStreamExt;
-use medi_rs::{
-    MediCommand, MediStreamRequest, Result, StartError, StreamSender, medi_handler, medi_module, medi_stream_handler,
-    medi_task, mediator,
-};
+use core::convert::Infallible;
+use medi_rs::{MediCommand, MediContext, medi_module, mediator};
 use std::{cell::RefCell, thread_local};
 use wasm_bindgen::prelude::*;
 
@@ -14,7 +10,7 @@ extern "C" {
 }
 
 #[derive(MediCommand)]
-#[medi_command(return_type = String, error_type = medi_rs::Error)]
+#[medi_command(return_type = String, error_type = Infallible)]
 struct Greet {
     name: String,
 }
@@ -24,89 +20,40 @@ struct UserRegistered {
     email: String,
 }
 
-#[derive(Clone)]
-struct AuditEvent {
-    message: String,
-}
+struct Greeter;
 
-/// Counts down from `from` to `1`, one number every `interval_ms`.
-#[derive(MediStreamRequest)]
-#[medi_stream(item_type = u32, error_type = String, capacity = 4)]
-struct Countdown {
-    from: u32,
-    interval_ms: u32,
-}
-
-#[medi_stream_handler]
-async fn countdown_handler(
-    sender: StreamSender<'_, Countdown>,
-    request: Countdown,
-) -> core::result::Result<(), String> {
-    if request.from > 60 {
-        return Err(format!("countdown from {} is too long", request.from));
+impl Greeter {
+    async fn greet(
+        &mut self,
+        _context: &MediContext<'_, WasmMediator>,
+        request: Greet,
+    ) -> Result<String, Infallible> {
+        Ok(format!("Hello, {}!", request.name))
     }
-    for remaining in (1..=request.from).rev() {
-        TimeoutFuture::new(request.interval_ms).await;
-        sender.send(remaining).await;
-    }
-    Ok(())
-}
 
-#[medi_handler]
-async fn greet_handler(request: Greet) -> Result<String> {
-    Ok(format!("Hello, {}!", request.name))
-}
-
-#[medi_handler]
-async fn user_registered_handler(event: UserRegistered) -> Result<()> {
-    log(&format!("welcome email queued for {}", event.email));
-    Ok(())
-}
-
-#[medi_handler]
-async fn audit_event_handler(event: AuditEvent) -> Result<()> {
-    log(&format!("audit: {}", event.message));
-    Ok(())
-}
-
-#[medi_task]
-async fn announce_startup(_mediator: &WasmMediator) {
-    for i in 0..10 {
-        log(&format!("medi-rs WASM runtime task is running: {} seconds elapsed", i));
-        TimeoutFuture::new(1_000).await;
+    async fn user_registered(
+        &mut self,
+        _context: &MediContext<'_, WasmMediator>,
+        event: UserRegistered,
+    ) -> Result<(), Infallible> {
+        log(&format!("welcome email queued for {}", event.email));
+        Ok(())
     }
 }
 
 medi_module! {
     manifest greeter_manifest;
-    commands { Greet => greet_handler; }
-}
-
-medi_module! {
-    manifest countdown_manifest;
-    streams { Countdown => countdown_handler; }
-}
-
-medi_module! {
-    manifest email_manifest;
-    events { UserRegistered => [user_registered_handler]; }
-}
-
-medi_module! {
-    manifest audit_manifest;
-    events { AuditEvent => [audit_event_handler]; }
-}
-
-medi_module! {
-    manifest runtime_task_manifest;
-    tasks { announce_startup; }
+    module Greeter;
+    mailbox_capacity: 8;
+    commands { Greet => Greeter::greet; }
+    events { UserRegistered => [Greeter::user_registered]; }
 }
 
 mediator! {
     pub struct WasmMediator {
-        event_queue_capacity: 16;
+        event_queue_capacity: 1;
         event_workers: 1;
-        modules: [greeter_manifest, countdown_manifest, email_manifest, audit_manifest, runtime_task_manifest];
+        modules: [greeter_manifest];
     }
 }
 
@@ -114,56 +61,14 @@ thread_local! {
     static MEDIATOR: RefCell<Option<&'static WasmMediator>> = const { RefCell::new(None) };
 }
 
-/// Send a request/response command through the generated WASM mediator.
 #[wasm_bindgen]
-pub async fn greet(name: String) -> core::result::Result<String, JsValue> {
+pub async fn greet(name: String) -> Result<String, JsValue> {
     mediator().send(Greet { name }).await.map_err(to_js_error)
 }
 
-/// Consume a typed stream: each number is logged as soon as the handler sends
-/// it, and all numbers are returned when the stream ends.
-///
-/// A handler error is returned after the numbers that were already logged.
 #[wasm_bindgen]
-pub async fn countdown(from: u32, interval_ms: u32) -> core::result::Result<Vec<u32>, JsValue> {
-    let mut received = Vec::new();
-    mediator()
-        .stream(Countdown { from, interval_ms })
-        .try_for_each(|number| {
-            log(&format!("countdown: {number}"));
-            received.push(number);
-            async { Ok(()) }
-        })
-        .await
-        .map_err(|error| JsValue::from_str(&error))?;
-    Ok(received)
-}
-
-/// Verify that a generated mediator cannot be started twice.
-///
-/// This is exported for the WASM integration test.
-#[doc(hidden)]
-#[wasm_bindgen]
-pub fn duplicate_start_is_rejected() -> bool {
-    matches!(mediator().start(), Err(StartError::AlreadyStarted))
-}
-
-/// Publish an event through the generated WASM mediator.
-#[wasm_bindgen]
-pub async fn publish_user_registered(email: String) -> core::result::Result<(), JsValue> {
+pub async fn publish_user_registered(email: String) -> Result<(), JsValue> {
     mediator().publish(UserRegistered { email }).await.map_err(to_js_error)
-}
-
-/// Send a command through the same generated mediator used by the other exports.
-#[wasm_bindgen]
-pub async fn greet_with_generated_mediator(name: String) -> core::result::Result<String, JsValue> {
-    greet(name).await
-}
-
-/// Publish an event through the same generated mediator used by the other exports.
-#[wasm_bindgen]
-pub async fn publish_with_generated_mediator(message: String) -> core::result::Result<(), JsValue> {
-    mediator().publish(AuditEvent { message }).await.map_err(to_js_error)
 }
 
 fn mediator() -> &'static WasmMediator {
@@ -171,14 +76,13 @@ fn mediator() -> &'static WasmMediator {
         if let Some(mediator) = *cell.borrow() {
             return mediator;
         }
-
-        let mediator = Box::leak(Box::new(WasmMediator::builder().build()));
-        mediator.start().expect("mediator must start");
+        let mediator = Box::leak(Box::new(WasmMediator::builder().greeter(Greeter).build()));
+        mediator.start().expect("actor worker starts");
         *cell.borrow_mut() = Some(mediator);
         mediator
     })
 }
 
-fn to_js_error(error: medi_rs::Error) -> JsValue {
+fn to_js_error(error: impl core::fmt::Debug) -> JsValue {
     JsValue::from_str(&format!("{error:?}"))
 }

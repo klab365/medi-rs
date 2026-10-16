@@ -20,7 +20,14 @@ pub(crate) struct ResourceManifest {
     pub(crate) resource_type: Type,
 }
 
+#[derive(Clone)]
+pub(crate) struct ActorModuleManifest {
+    pub(crate) module_type: Type,
+    pub(crate) mailbox_capacity: syn::Expr,
+}
+
 pub(crate) struct ModuleManifest {
+    pub(crate) actor: Option<ActorModuleManifest>,
     pub(crate) commands: Vec<CommandManifest>,
     pub(crate) streams: Vec<CommandManifest>,
     pub(crate) events: Vec<EventManifest>,
@@ -32,7 +39,10 @@ pub(crate) struct ModuleManifest {
 
 impl Parse for ModuleManifest {
     fn parse(input: ParseStream<'_>) -> SynResult<Self> {
+        let mut module_type = None;
+        let mut mailbox_capacity = None;
         let mut manifest = Self {
+            actor: None,
             commands: Vec::new(),
             streams: Vec::new(),
             events: Vec::new(),
@@ -44,43 +54,67 @@ impl Parse for ModuleManifest {
 
         while !input.is_empty() {
             let section: Ident = input.parse()?;
+            match section.to_string().as_str() {
+                "module" => {
+                    if module_type.is_some() {
+                        return Err(syn::Error::new(section.span(), "duplicate `module` declaration"));
+                    }
+                    module_type = Some(input.parse()?);
+                    input.parse::<Token![;]>()?;
+                    continue;
+                }
+                "mailbox_capacity" => {
+                    if mailbox_capacity.is_some() {
+                        return Err(syn::Error::new(
+                            section.span(),
+                            "duplicate `mailbox_capacity` declaration",
+                        ));
+                    }
+                    input.parse::<Token![:]>()?;
+                    mailbox_capacity = Some(input.parse()?);
+                    input.parse::<Token![;]>()?;
+                    continue;
+                }
+                _ => {}
+            }
             let body;
             braced!(body in input);
             match section.to_string().as_str() {
                 "commands" => manifest.commands.extend(parse_commands(&body)?),
-                "streams" => manifest.streams.extend(parse_commands(&body)?),
                 "events" => manifest.events.extend(parse_events(&body)?),
-                "resources" => manifest.resources.extend(parse_resources(&body)?),
-                "tasks" if cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy")) => {
-                    manifest.tasks.extend(parse_tasks(&body)?);
-                }
-                "tasks" => {
-                    return Err(syn::Error::new(
-                        section.span(),
-                        "`tasks` requires a medi-rs runtime feature",
-                    ));
-                }
-                "startup" if cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy")) => {
-                    manifest.startup.extend(parse_tasks(&body)?);
-                }
-                "shutdown" if cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy")) => {
-                    manifest.shutdown.extend(parse_tasks(&body)?);
-                }
-                "startup" | "shutdown" => {
-                    return Err(syn::Error::new(
-                        section.span(),
-                        "lifecycle hooks require a medi-rs runtime feature",
-                    ));
-                }
                 _ => {
                     return Err(syn::Error::new(
                         section.span(),
-                        "expected `commands`, `streams`, `events`, `resources`, `tasks`, `startup`, or `shutdown`",
+                        "expected `commands` or `events`; streams, resources, tasks, and lifecycle hooks were removed in v4",
                     ));
                 }
             }
         }
 
+        manifest.actor = match (module_type, mailbox_capacity) {
+            (Some(module_type), Some(mailbox_capacity)) => Some(ActorModuleManifest {
+                module_type,
+                mailbox_capacity,
+            }),
+            (None, None) => {
+                return Err(syn::Error::new(
+                    input.span(),
+                    "v4 modules require `module Type; mailbox_capacity: N;`",
+                ));
+            }
+            (Some(module_type), None) => {
+                return Err(syn::Error::new_spanned(
+                    module_type,
+                    "actor modules require `mailbox_capacity: N;`",
+                ));
+            }
+            (None, Some(mailbox_capacity)) => {
+                return Err(syn::Error::new_spanned(
+                    mailbox_capacity,
+                    "`mailbox_capacity` requires a `module Type;` declaration",
+                ));
+            }
+        };
         Ok(manifest)
     }
 }
@@ -126,39 +160,6 @@ fn parse_event_handlers(body: ParseStream<'_>) -> SynResult<Vec<syn::Path>> {
         }
     }
     Ok(handlers)
-}
-
-fn parse_tasks(body: ParseStream<'_>) -> SynResult<Vec<syn::Path>> {
-    let mut tasks = Vec::new();
-    while !body.is_empty() {
-        tasks.push(body.parse()?);
-        if !body.is_empty() {
-            body.parse::<Token![;]>()?;
-        }
-    }
-    Ok(tasks)
-}
-
-fn parse_resources(body: ParseStream<'_>) -> SynResult<Vec<ResourceManifest>> {
-    let mut resources = Vec::new();
-    while !body.is_empty() {
-        let name: Ident = body.parse()?;
-        if !body.peek(Token![:]) {
-            return Err(syn::Error::new(
-                name.span(),
-                "resource declarations must use `name: Type`",
-            ));
-        }
-        body.parse::<Token![:]>()?;
-        resources.push(ResourceManifest {
-            name: Some(name),
-            resource_type: body.parse()?,
-        });
-        if !body.is_empty() {
-            body.parse::<Token![;]>()?;
-        }
-    }
-    Ok(resources)
 }
 
 pub(crate) fn handler_invoker_path(handler: &syn::Path) -> syn::Path {
@@ -237,14 +238,16 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
             tokens
         }
     };
+    let actor = input.module.actor.map(|actor| {
+        let ActorModuleManifest {
+            module_type,
+            mailbox_capacity,
+        } = actor;
+        let module_type = rewrite(quote! { #module_type });
+        quote! { module #module_type; mailbox_capacity: #mailbox_capacity; }
+    });
     let commands = input.module.commands.into_iter().map(|command| {
         let CommandManifest { request, handler } = command;
-        let request = rewrite(quote! { #request });
-        let handler = rewrite(quote! { #handler });
-        quote! { #request => #handler; }
-    });
-    let streams = input.module.streams.into_iter().map(|stream| {
-        let CommandManifest { request, handler } = stream;
         let request = rewrite(quote! { #request });
         let handler = rewrite(quote! { #handler });
         quote! { #request => #handler; }
@@ -258,37 +261,6 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
             .collect();
         quote! { #event_type => [#(#handlers),*]; }
     });
-    let resources = input.module.resources.into_iter().map(|resource| {
-        let ResourceManifest { name, resource_type } = resource;
-        let resource_type = rewrite(quote! { #resource_type });
-        if let Some(name) = name {
-            quote! { #name: #resource_type; }
-        } else {
-            quote! { #resource_type; }
-        }
-    });
-    let tasks: Vec<_> = input
-        .module
-        .tasks
-        .into_iter()
-        .map(|task| rewrite(quote! { #task; }))
-        .collect();
-    let startup: Vec<_> = input
-        .module
-        .startup
-        .into_iter()
-        .map(|hook| rewrite(quote! { #hook; }))
-        .collect();
-    let shutdown: Vec<_> = input
-        .module
-        .shutdown
-        .into_iter()
-        .map(|hook| rewrite(quote! { #hook; }))
-        .collect();
-    // Do not emit empty runtime-only sections so command-only manifests remain usable without a runtime.
-    let tasks_section = (!tasks.is_empty()).then(|| quote! { tasks { #(#tasks)* } });
-    let startup_section = (!startup.is_empty()).then(|| quote! { startup { #(#startup)* } });
-    let shutdown_section = (!shutdown.is_empty()).then(|| quote! { shutdown { #(#shutdown)* } });
 
     let export_attribute = exported.then(|| quote! { #[macro_export] });
     let manifest_use = (!exported).then(|| {
@@ -316,13 +288,9 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
                     event_queue_capacity: $capacity;
                     event_workers: $workers;
                     modules: [$($modules)* {
+                        #actor
                         commands { #(#commands)* }
-                        streams { #(#streams)* }
                         events { #(#events)* }
-                        resources { #(#resources)* }
-                        #tasks_section
-                        #startup_section
-                        #shutdown_section
                     },];
                     decorators: [$($decorators),*];
                     event_failure_reporter: [$($reporter)?];
@@ -335,4 +303,33 @@ pub fn medi_module_inner(input: proc_macro::TokenStream) -> proc_macro::TokenStr
         #manifest_use
     }
     .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ModuleManifest;
+    use syn::parse_str;
+
+    #[test]
+    fn parses_actor_module_and_mailbox_capacity() {
+        let manifest = parse_str::<ModuleManifest>(
+            "module ButtonModule; mailbox_capacity: 8; commands { EnableButton => ButtonModule::enable; }",
+        )
+        .expect("actor module manifest should parse");
+        let actor = manifest.actor.expect("actor declaration should be retained");
+        let module_type = actor.module_type;
+        let mailbox_capacity = actor.mailbox_capacity;
+        assert_eq!(quote::quote!(#module_type).to_string(), "ButtonModule");
+        assert_eq!(quote::quote!(#mailbox_capacity).to_string(), "8");
+        assert_eq!(manifest.commands.len(), 1);
+    }
+
+    #[test]
+    fn requires_capacity_when_module_type_is_declared() {
+        let error = match parse_str::<ModuleManifest>("module ButtonModule;") {
+            Ok(_) => panic!("module declaration without capacity must fail"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("mailbox_capacity"));
+    }
 }

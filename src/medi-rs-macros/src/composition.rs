@@ -1,10 +1,12 @@
 //! Mediator-composition parsing, validation, and code generation.
 
+use crate::actor::{associated_method, generate_actor_support};
 use crate::generate::{
-    ConstructorFields, EventDispatchConfig, LifecycleHookCalls, collect_event_routes, collect_hooks,
-    collect_resource_names, collect_resource_types, collect_tasks, generate_builder, generate_command_routes,
-    generate_composition_description, generate_constructor, generate_event_support, generate_hook_calls,
-    generate_stream_support, generate_task_only_start, generate_task_spawns, generate_task_workers,
+    ConstructorFields, EventDispatchConfig, LifecycleHookCalls, actor_field_name, collect_actor_modules,
+    collect_event_routes, collect_hooks, collect_resource_names, collect_resource_types, collect_tasks,
+    generate_builder, generate_command_routes, generate_composition_description, generate_constructor,
+    generate_event_support, generate_hook_calls, generate_stream_support, generate_task_only_start,
+    generate_task_spawns, generate_task_workers,
 };
 use crate::manifest::ModuleManifest;
 use quote::{format_ident, quote};
@@ -142,9 +144,85 @@ fn validate_unique_registrations(modules: &[ModuleManifest]) -> SynResult<()> {
     let mut resources = std::collections::HashMap::new();
     let mut builder_methods = std::collections::HashMap::new();
     let mut streams = std::collections::HashMap::new();
+    let mut actor_types = std::collections::HashMap::new();
+    let mut actor_events = std::collections::HashMap::new();
+    let mut legacy_events = std::collections::HashMap::new();
     let mut resource_index = 0;
     let mut errors = None;
     for module in modules {
+        if let Some(actor) = &module.actor {
+            if !module.resources.is_empty()
+                || !module.tasks.is_empty()
+                || !module.startup.is_empty()
+                || !module.shutdown.is_empty()
+                || !module.streams.is_empty()
+            {
+                combine_error(
+                    &mut errors,
+                    syn::Error::new_spanned(
+                        &actor.module_type,
+                        "actor modules cannot declare legacy resources, tasks, lifecycle hooks, or streams",
+                    ),
+                );
+            }
+            for command in &module.commands {
+                if associated_method(&command.handler, &actor.module_type).is_none() {
+                    combine_error(
+                        &mut errors,
+                        syn::Error::new_spanned(
+                            &command.handler,
+                            "actor command handlers must be methods on the declared module type",
+                        ),
+                    );
+                }
+            }
+            for event in &module.events {
+                for handler in &event.handlers {
+                    if associated_method(handler, &actor.module_type).is_none() {
+                        combine_error(
+                            &mut errors,
+                            syn::Error::new_spanned(
+                                handler,
+                                "actor event handlers must be methods on the declared module type",
+                            ),
+                        );
+                    }
+                }
+            }
+            for event in &module.events {
+                let event_type = &event.event;
+                actor_events.insert(quote!(#event_type).to_string(), event_type.span());
+            }
+            let module_type = &actor.module_type;
+            let key = quote!(#module_type).to_string();
+            if let Some(first_span) = actor_types.insert(key.clone(), module_type.span()) {
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(module_type.span(), format!("duplicate actor module `{key}`")),
+                );
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(first_span, format!("first actor module `{key}` is here")),
+                );
+            }
+            let method = actor_field_name(module_type);
+            if let Some(first_span) = builder_methods.insert(method.to_string(), method.span()) {
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(method.span(), format!("duplicate builder method `{method}`")),
+                );
+                combine_error(
+                    &mut errors,
+                    syn::Error::new(first_span, format!("first builder method `{method}` is here")),
+                );
+            }
+        }
+        if module.actor.is_none() {
+            for event in &module.events {
+                let event_type = &event.event;
+                legacy_events.insert(quote!(#event_type).to_string(), event_type.span());
+            }
+        }
         for stream in &module.streams {
             let request = &stream.request;
             let key = quote!(#request).to_string();
@@ -206,6 +284,24 @@ fn validate_unique_registrations(modules: &[ModuleManifest]) -> SynResult<()> {
             resource_index += 1;
         }
     }
+    for (event, actor_span) in &actor_events {
+        if let Some(legacy_span) = legacy_events.get(event) {
+            combine_error(
+                &mut errors,
+                syn::Error::new(
+                    *actor_span,
+                    format!("event `{event}` is routed to both an actor module and a legacy event handler"),
+                ),
+            );
+            combine_error(
+                &mut errors,
+                syn::Error::new(
+                    *legacy_span,
+                    format!("first non-actor event route for `{event}` is here"),
+                ),
+            );
+        }
+    }
     errors.map_or(Ok(()), Err)
 }
 
@@ -236,8 +332,29 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
         .into();
     }
     let stream_support = generate_stream_support(&input.modules, &input.name);
+    let actor_modules = collect_actor_modules(&input.modules);
+    if !actor_modules.is_empty() && !cfg!(any(feature = "tokio", feature = "wasm", feature = "embassy")) {
+        return syn::Error::new(input.name.span(), "actor modules require a runtime feature")
+            .into_compile_error()
+            .into();
+    }
+    let actor_types: Vec<_> = actor_modules.iter().map(|actor| actor.module_type.clone()).collect();
+    let actor_names: Vec<_> = (0..actor_modules.len())
+        .map(|index| format_ident!("actor_{index}"))
+        .collect();
+    let actor_fields: Vec<_> = actor_modules
+        .iter()
+        .map(|actor| {
+            let field = actor_field_name(&actor.module_type);
+            let module_type = &actor.module_type;
+            quote! { #field: ::medi_rs::adapters::selected::ActorSlot<#module_type>, }
+        })
+        .collect();
+    let actor_support = generate_actor_support(&input.modules, &input.name, actor_field_name);
     let resource_types = collect_resource_types(&input.modules);
-    let builder_resource_names = collect_resource_names(&input.modules);
+    let builder_types: Vec<_> = resource_types.iter().chain(&actor_types).cloned().collect();
+    let mut builder_resource_names = collect_resource_names(&input.modules);
+    builder_resource_names.extend(actor_modules.iter().map(|actor| actor_field_name(&actor.module_type)));
     let resource_tuple = nested_tuple_type(&resource_types);
     let resource_names: Vec<_> = (0..resource_types.len())
         .map(|index| format_ident!("resource_{index}"))
@@ -251,16 +368,24 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     let task_workers = generate_task_workers(&tasks, &input.name);
     let task_spawns = generate_task_spawns(&tasks);
     let command_routes = generate_command_routes(&input.modules, &input.name, &input.decorators);
+    let actor_initializers = &actor_support.initializers;
+    let stream_initializers = &stream_support.initializers;
+    let actor_and_stream_initializers = quote! {
+        #actor_initializers
+        #stream_initializers
+    };
     let constructor = generate_constructor(
         &resource_types,
         &resource_names,
+        &actor_modules,
+        &actor_names,
         &resource_values,
         has_events,
         &input.event_queue_capacity,
         ConstructorFields {
             task_count: tasks.len(),
             event_failure_reporter: input.event_failure_reporter.as_ref(),
-            stream_channels: &stream_support.initializers,
+            stream_channels: &actor_and_stream_initializers,
         },
     );
     let job_name = format_ident!("{}EventJob", input.name);
@@ -280,6 +405,8 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
                 },
             },
             &task_spawns,
+            &actor_support.starts,
+            &actor_support.stops,
         )
     });
     let reporter_field = input
@@ -295,9 +422,10 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     let publish_routes = event_support
         .as_ref()
         .map_or_else(|| quote! {}, |support| support.publish_routes.clone());
-    let publish_method = event_support
-        .as_ref()
-        .map_or_else(|| quote! {}, |support| support.publish_method.clone());
+    let publish_method = event_support.as_ref().map_or_else(
+        || actor_support.publish_method.clone(),
+        |support| support.publish_method.clone(),
+    );
     let event_worker = event_support
         .as_ref()
         .map_or_else(|| quote! {}, |support| support.worker.clone());
@@ -308,6 +436,8 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
         &input.name,
         &resource_tuple,
         &task_spawns,
+        &actor_support.starts,
+        &actor_support.stops,
         LifecycleHookCalls {
             startup: &startup_hook_calls,
             shutdown: &shutdown_hook_calls,
@@ -319,7 +449,7 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     });
     let vis = input.vis;
     let name = input.name;
-    let builder = generate_builder(&name, &vis, &resource_types, &builder_resource_names);
+    let builder = generate_builder(&name, &vis, &builder_types, &builder_resource_names);
     let capacity = input.event_queue_capacity;
     let workers = input.event_workers;
     let count = input.count;
@@ -327,9 +457,14 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
     let stream_fields = stream_support.fields;
     let stream_method = stream_support.method;
     let stream_routes = stream_support.routes;
+    let actor_fields_generated = actor_support.fields;
+    let actor_jobs = actor_support.jobs;
+    let actor_workers = actor_support.workers;
+    let actor_routes = actor_support.routes;
     quote! {
         #event_job
-        #vis struct #name { resources: #resource_tuple, #event_field #reporter_field #(#task_shutdown_fields)* #stream_fields lifecycle: ::medi_rs::Lifecycle }
+        #actor_jobs
+        #vis struct #name { resources: #resource_tuple, #(#actor_fields)* #actor_fields_generated #event_field #reporter_field #(#task_shutdown_fields)* #stream_fields lifecycle: ::medi_rs::Lifecycle }
         #builder
         impl #name {
             #constructor
@@ -345,10 +480,12 @@ pub fn finalize_composition_inner(input: proc_macro::TokenStream) -> proc_macro:
             /// Command-only mediators have no `start` method and always return `false`.
             pub fn is_started(&self) -> bool { self.lifecycle.is_started() }
             /// Send a command through its macro-generated static route.
-            pub async fn send<C>(&self, command: C) -> core::result::Result<C::Response, C::Error> where C: ::medi_rs::StaticSendCommand<Self> { command.send(self).await }
+            pub async fn send<C>(&self, command: C) -> core::result::Result<C::Response, ::medi_rs::SendError<C::Error>> where C: ::medi_rs::StaticSendCommand<Self> { command.send(self).await }
+            /// Attempt to enqueue a command for an actor module without waiting for capacity.
+            pub fn post<C>(&self, command: C) -> core::result::Result<(), ::medi_rs::PostError<C>> where C: ::medi_rs::StaticPostCommand<Self> { command.post(self) }
             #publish_method
             #stream_method
         }
-        #(#command_routes)* #stream_routes #publish_routes #event_worker #(#task_workers)* #task_only_start
+        #(#command_routes)* #actor_routes #stream_routes #publish_routes #event_worker #actor_workers #(#task_workers)* #task_only_start
     }.into()
 }

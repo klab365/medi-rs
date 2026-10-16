@@ -42,7 +42,7 @@ impl<T> Copy for TokioStreamSender<'_, T> {}
 /// Consumer-side receive handle for [`TokioStreamChannel`].
 pub struct TokioStreamReceiver<'a, T>(tokio::sync::MutexGuard<'a, mpsc::Receiver<T>>);
 
-impl<T: Send + 'static> crate::StreamChannel<T> for TokioStreamChannel<T> {
+impl<T: Send + 'static> crate::adapters::stream::StreamChannel<T> for TokioStreamChannel<T> {
     type Sender<'a> = TokioStreamSender<'a, T>;
     type Receiver<'a> = TokioStreamReceiver<'a, T>;
 
@@ -62,13 +62,13 @@ impl<T: Send + 'static> crate::StreamChannel<T> for TokioStreamChannel<T> {
     }
 }
 
-impl<T: Send> crate::StreamChannelSender<T> for TokioStreamSender<'_, T> {
+impl<T: Send> crate::adapters::stream::StreamChannelSender<T> for TokioStreamSender<'_, T> {
     async fn send(&self, item: T) {
         let _ = self.0.send(item).await;
     }
 }
 
-impl<T: Send> crate::StreamChannelReceiver<T> for TokioStreamReceiver<'_, T> {
+impl<T: Send> crate::adapters::stream::StreamChannelReceiver<T> for TokioStreamReceiver<'_, T> {
     async fn recv(&mut self) -> Option<T> {
         self.0.recv().await
     }
