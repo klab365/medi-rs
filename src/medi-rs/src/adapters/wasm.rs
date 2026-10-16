@@ -55,7 +55,7 @@ impl<T> Copy for WasmStreamSender<'_, T> {}
 /// Consumer-side receive handle for [`WasmStreamChannel`].
 pub struct WasmStreamReceiver<'a, T>(futures::lock::MutexGuard<'a, mpsc::Receiver<T>>);
 
-impl<T: Send + 'static> crate::StreamChannel<T> for WasmStreamChannel<T> {
+impl<T: Send + 'static> crate::adapters::stream::StreamChannel<T> for WasmStreamChannel<T> {
     type Sender<'a> = WasmStreamSender<'a, T>;
     type Receiver<'a> = WasmStreamReceiver<'a, T>;
 
@@ -77,13 +77,13 @@ impl<T: Send + 'static> crate::StreamChannel<T> for WasmStreamChannel<T> {
     }
 }
 
-impl<T: Send> crate::StreamChannelSender<T> for WasmStreamSender<'_, T> {
+impl<T: Send> crate::adapters::stream::StreamChannelSender<T> for WasmStreamSender<'_, T> {
     async fn send(&self, item: T) {
         let _ = self.0.lock().await.send(item).await;
     }
 }
 
-impl<T: Send> crate::StreamChannelReceiver<T> for WasmStreamReceiver<'_, T> {
+impl<T: Send> crate::adapters::stream::StreamChannelReceiver<T> for WasmStreamReceiver<'_, T> {
     async fn recv(&mut self) -> Option<T> {
         self.0.next().await
     }

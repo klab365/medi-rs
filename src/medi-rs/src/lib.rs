@@ -1,90 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-//! Static async mediator with generated command dispatch, event workers, and
-//! typed resource injection.
+//! Static async mediator built from state-owning actor modules.
 //!
-//! Applications define commands with [`MediCommand`], annotate async handlers
-//! with [`medi_handler`], group routes in [`medi_module`], and compose the
-//! selected modules with [`mediator!`]. The generated mediator dispatches
-//! commands directly to their handler and resolves handler resources from a
-//! typed tuple; it does not use dynamic handler or resource registries.
-//!
-//! # Commands
-//!
-//! ```no_run
-//! use medi_rs::{MediCommand, Result, medi_handler, medi_module, mediator};
-//!
-//! #[derive(MediCommand)]
-//! #[medi_command(return_type = String, error_type = medi_rs::Error)]
-//! struct Greet;
-//!
-//! #[medi_handler]
-//! async fn greet(_: Greet) -> Result<String> {
-//!     Ok("hello".into())
-//! }
-//!
-//! medi_module! {
-//!     manifest greeting;
-//!     commands { Greet => greet; }
-//! }
-//!
-//! mediator! {
-//!     struct AppMediator {
-//!         event_queue_capacity: 16;
-//!         event_workers: 1;
-//!         modules: [greeting];
-//!     }
-//! }
-//!
-//! # async fn run() -> Result<()> {
-//! assert_eq!(AppMediator::builder().build().send(Greet).await?, "hello");
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! Commands default to a `()` response and [`core::convert::Infallible`] error.
-//! Set `return_type` and `error_type` in `#[medi_command(...)]` for other
-//! response and application-error types.
-//!
-//! # Resources and events
-//!
-//! Resources are values listed in a module's `resources` section. They are
-//! passed to the generated `new` constructor and injected as handler parameters
-//! before the message: a `Resource` parameter receives a clone, while a
-//! `&Resource` parameter borrows the mediator-owned value without requiring
-//! `Clone`. Events are ordinary `Clone + Send + 'static` values listed in an
-//! `events` section. To process events, retain the
-//! mediator in `'static` storage and call its generated `start` method before
-//! calling `publish`.
-//!
-//! Enable one runtime feature for event processing: `tokio`, `wasm`, or
-//! `embassy`. The features are mutually exclusive. Command-only mediators do
-//! not need a runtime feature.
-//!
-//! # Streams
-//!
-//! A stream request derives [`MediStreamRequest`]; its
-//! [`medi_stream_handler`] pushes items through a `StreamSender` and the
-//! generated `stream` method returns them as a typed
-//! [`Stream`](stream::Stream). Stream routes use the channel of the selected
-//! runtime feature and are listed in a module's `streams` section. See the
-//! [`stream`] module for error and cancellation semantics.
-//!
-//! ```ignore
-//! use medi_rs::stream::TryStreamExt;
-//!
-//! mediator
-//!     .stream(SearchUsers { query: "Ada".into() })
-//!     .try_for_each(|user| async move {
-//!         println!("{user}");
-//!         Ok(())
-//!     })
-//!     .await?;
-//! ```
-//!
-//! Consuming combinators such as `try_for_each`, `for_each`, and `try_collect`
-//! pin the stream internally. Only a manual `next()` loop needs
-//! `core::pin::pin!`.
+//! A [`medi_module`] declaration names a module type, a bounded mailbox, and
+//! routes to its `&mut self` methods. [`mediator`] composes those modules;
+//! commands use `send` for a reply or `post` for non-blocking delivery, while
+//! events use `publish`. See `docs/v4-actors.md` for the complete model.
 
 #[cfg(test)]
 extern crate alloc;
@@ -204,57 +125,24 @@ macro_rules! __medi_rs_collect_modules {
 compile_error!("features `tokio`, `wasm`, and `embassy` are mutually exclusive; enable at most one runtime adapter");
 
 pub mod adapters;
-mod bus;
 mod error;
-mod event;
-mod resource;
-pub mod stream;
 /// Internal typed-tuple primitives used by generated mediator code.
 #[doc(hidden)]
 pub mod tlist;
 
 // flatten the module structure
 pub use adapters::lifecycle::Lifecycle;
+pub use adapters::mailbox::Mailbox;
 pub use adapters::queue::EventQueue;
 pub use adapters::shutdown::ShutdownSignal;
+#[doc(hidden)]
 pub use adapters::startup::StartupSpawner;
-pub use adapters::stream::{StreamChannel, StreamChannelReceiver, StreamChannelSender};
 pub use error::*;
 
-/// Internal sender used by generated event dispatch routes.
-#[cfg(any(feature = "tokio", feature = "wasm"))]
-#[doc(hidden)]
-pub type __EventCompletionSender = futures::channel::oneshot::Sender<EventDispatchOutcome>;
+pub use medi_rs_macros::{__medi_rs_finalize_composition, MediCommand, medi_module};
 
-/// Create the completion channel used by generated event dispatch routes.
-#[cfg(any(feature = "tokio", feature = "wasm"))]
-#[doc(hidden)]
-pub fn __event_completion_channel() -> (
-    __EventCompletionSender,
-    futures::channel::oneshot::Receiver<EventDispatchOutcome>,
-) {
-    futures::channel::oneshot::channel()
-}
-
-#[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
-#[doc(hidden)]
-pub use stream::StaticStream;
-#[doc(hidden)]
-pub use stream::StreamMessage;
-pub use stream::StreamRequest;
-#[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
-pub use stream::StreamSender;
-
-pub use medi_rs_macros::{
-    __medi_rs_finalize_composition, MediCommand, MediStreamRequest, medi_handler, medi_module, medi_shutdown,
-    medi_startup, medi_stream_handler, medi_task,
-};
-
-/// Marker used by generated mediator builders before a resource is supplied.
 #[doc(hidden)]
 pub struct MissingResource;
-
-/// Wrapper used by generated mediator builders after a resource is supplied.
 #[doc(hidden)]
 pub struct ProvidedResource<T>(pub T);
 
@@ -380,7 +268,7 @@ pub trait EventFailureReporter: Send + Sync + 'static {
 ///
 /// Decorators call [`Self::call`] to forward a command to the next decorator
 /// or the handler. The blanket implementation means an ordinary `FnOnce`
-/// closure generated by [`medi_handler`] implements this trait automatically.
+/// closure implements this trait automatically.
 pub trait DecoratorNext<C>: Send {
     /// Response returned by the remaining decorator pipeline or handler.
     type Response: Send;
@@ -437,7 +325,66 @@ pub trait StaticSendCommand<M>: Command + Sized {
     fn send(
         self,
         mediator: &M,
-    ) -> impl core::future::Future<Output = core::result::Result<Self::Response, Self::Error>> + Send;
+    ) -> impl core::future::Future<Output = core::result::Result<Self::Response, SendError<Self::Error>>> + Send;
+
+    /// Return the actor-module route, if this command targets a module actor.
+    fn target_module() -> Option<usize> {
+        None
+    }
+}
+
+/// Static non-blocking command route generated for actor modules.
+#[doc(hidden)]
+pub trait StaticPostCommand<M>: Command + Sized {
+    /// Attempt to enqueue this command without waiting for mailbox capacity.
+    fn post(self, mediator: &M) -> core::result::Result<(), PostError<Self>>;
+}
+
+/// Handler context for actor modules.
+///
+/// The context records the currently executing module so awaited self-dispatch
+/// can fail immediately instead of deadlocking that module's actor.
+pub struct MediContext<'a, M> {
+    mediator: &'a M,
+    source_module: usize,
+}
+
+impl<'a, M> MediContext<'a, M> {
+    /// Create a context for generated actor dispatch.
+    #[doc(hidden)]
+    pub const fn __new(mediator: &'a M, source_module: usize) -> Self {
+        Self {
+            mediator,
+            source_module,
+        }
+    }
+
+    /// Send a command to another module and await its response.
+    pub async fn send<C>(&self, command: C) -> core::result::Result<C::Response, SendError<C::Error>>
+    where
+        C: StaticSendCommand<M>,
+    {
+        if C::target_module() == Some(self.source_module) {
+            return Err(SendError::Dispatch(DispatchError::SelfDispatch));
+        }
+        command.send(self.mediator).await
+    }
+
+    /// Post a command without waiting for its handler or mailbox capacity.
+    pub fn post<C>(&self, command: C) -> core::result::Result<(), PostError<C>>
+    where
+        C: StaticPostCommand<M>,
+    {
+        command.post(self.mediator)
+    }
+
+    /// Publish an event through the composed mediator's event routes.
+    pub async fn publish<E>(&self, event: E) -> Result<()>
+    where
+        E: StaticPublish<M>,
+    {
+        event.publish(self.mediator).await
+    }
 }
 
 /// Static event route generated for an event and a concrete mediator type.

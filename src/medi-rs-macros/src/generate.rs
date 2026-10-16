@@ -2,7 +2,7 @@
 
 use crate::handler::decorate_handler_call;
 use crate::hook::hook_invoker_path;
-use crate::manifest::{ModuleManifest, handler_invoker_path};
+use crate::manifest::{ActorModuleManifest, ModuleManifest, handler_invoker_path};
 use crate::stream::stream_handler_invoker_path;
 use crate::task::task_invoker_path;
 use quote::{format_ident, quote};
@@ -10,7 +10,11 @@ use syn::{Expr, Ident, Path, Type};
 
 pub(crate) fn collect_event_routes(modules: &[ModuleManifest]) -> Vec<(Type, Vec<syn::Path>)> {
     let mut routes: Vec<(Type, Vec<syn::Path>)> = Vec::new();
-    for event in modules.iter().flat_map(|module| &module.events) {
+    for event in modules
+        .iter()
+        .filter(|module| module.actor.is_none())
+        .flat_map(|module| &module.events)
+    {
         let event_type = &event.event;
         let key = quote!(#event_type).to_string();
         if let Some((_, handlers)) = routes
@@ -86,6 +90,26 @@ fn generate_startup_spawner() -> proc_macro2::TokenStream {
     quote! { let startup_spawner = ::medi_rs::StartupSpawner::unavailable(); }
 }
 
+pub(crate) fn collect_actor_modules(modules: &[ModuleManifest]) -> Vec<ActorModuleManifest> {
+    modules.iter().filter_map(|module| module.actor.clone()).collect()
+}
+
+pub(crate) fn actor_field_name(module_type: &Type) -> Ident {
+    let name = match module_type {
+        Type::Path(path) => path.path.segments.last().map(|segment| segment.ident.to_string()),
+        _ => None,
+    }
+    .unwrap_or_else(|| "module".to_owned());
+    let mut field = String::new();
+    for (index, character) in name.chars().enumerate() {
+        if character.is_uppercase() && index > 0 {
+            field.push('_');
+        }
+        field.extend(character.to_lowercase());
+    }
+    format_ident!("{}", field)
+}
+
 pub(crate) fn collect_resource_types(modules: &[ModuleManifest]) -> Vec<Type> {
     modules
         .iter()
@@ -155,9 +179,12 @@ pub(crate) struct ConstructorFields<'a> {
     pub(crate) stream_channels: &'a proc_macro2::TokenStream,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_constructor(
     resource_types: &[Type],
     resource_names: &[Ident],
+    actor_modules: &[ActorModuleManifest],
+    actor_names: &[Ident],
     resource_values: &proc_macro2::TokenStream,
     has_events: bool,
     capacity: &Expr,
@@ -172,32 +199,59 @@ pub(crate) fn generate_constructor(
         let field = format_ident!("task_shutdown_{index}");
         quote! { #field: ::medi_rs::ShutdownSignal::new(), }
     });
-    let configuration_check = quote! {
-        assert!(#capacity > 0, "event_queue_capacity must be greater than zero");
-    };
-    let configuration_validation = if has_events {
+    let actor_capacity_assertions = actor_modules.iter().map(|actor| {
+        let module_type = &actor.module_type;
+        let capacity = &actor.mailbox_capacity;
+        quote! { assert!(#capacity > 0, concat!("mailbox capacity for ", stringify!(#module_type), " must be greater than zero")); }
+    });
+    let actor_capacity_validation = actor_modules.iter().map(|actor| {
+        let module_type = &actor.module_type;
+        let capacity = &actor.mailbox_capacity;
         quote! {
-            fn __validate_configuration() -> core::result::Result<(), ::medi_rs::BuildError> {
-                if #capacity == 0 {
-                    return Err(::medi_rs::BuildError::InvalidEventQueueCapacity);
-                }
-                Ok(())
+            if #capacity == 0 {
+                return Err(::medi_rs::BuildError::InvalidMailboxCapacity { module: stringify!(#module_type) });
             }
         }
-    } else {
+    });
+    let event_capacity_assertion = has_events.then(|| {
         quote! {
-            fn __validate_configuration() -> core::result::Result<(), ::medi_rs::BuildError> {
-                Ok(())
+            assert!(#capacity > 0, "event_queue_capacity must be greater than zero");
+        }
+    });
+    let event_capacity_validation = has_events.then(|| {
+        quote! {
+            if #capacity == 0 {
+                return Err(::medi_rs::BuildError::InvalidEventQueueCapacity);
             }
+        }
+    });
+    let configuration_check = quote! {
+        #event_capacity_assertion
+        #(#actor_capacity_assertions)*
+    };
+    let configuration_validation = quote! {
+        fn __validate_configuration() -> core::result::Result<(), ::medi_rs::BuildError> {
+            #event_capacity_validation
+            #(#actor_capacity_validation)*
+            Ok(())
         }
     };
     let reporter_value = event_failure_reporter.map(|reporter| quote! { event_failure_reporter: #reporter, });
+    let actor_parameters = actor_modules.iter().zip(actor_names).map(|(actor, name)| {
+        let module_type = &actor.module_type;
+        quote! { #name: #module_type }
+    });
+    let actor_fields = actor_modules.iter().zip(actor_names).map(|(actor, name)| {
+        let field = actor_field_name(&actor.module_type);
+        quote! { #field: ::medi_rs::adapters::selected::ActorSlot::new(#name), }
+    });
     let constructor = match (resource_types.is_empty(), has_events) {
         (true, true) => quote! {
-            fn __from_resources() -> Self {
+            fn __from_resources(#(#actor_parameters),*) -> Self {
                 #configuration_check
                 Self {
                     resources: (),
+                    #(#actor_fields)*
                     event_queue: ::medi_rs::EventQueue::new(Some(#capacity)),
                     #reporter_value
                     #(#task_shutdown_fields)*
@@ -207,15 +261,17 @@ pub(crate) fn generate_constructor(
             }
         },
         (true, false) => quote! {
-            fn __from_resources() -> Self {
-                Self { resources: (), #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
+            fn __from_resources(#(#actor_parameters),*) -> Self {
+                #configuration_check
+                Self { resources: (), #(#actor_fields)* #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
             }
         },
         (false, true) => quote! {
-            fn __from_resources(#(#resource_names: #resource_types),*) -> Self {
+            fn __from_resources(#(#resource_names: #resource_types,)* #(#actor_parameters),*) -> Self {
                 #configuration_check
                 Self {
                     resources: #resource_values,
+                    #(#actor_fields)*
                     event_queue: ::medi_rs::EventQueue::new(Some(#capacity)),
                     #reporter_value
                     #(#task_shutdown_fields)*
@@ -225,8 +281,9 @@ pub(crate) fn generate_constructor(
             }
         },
         (false, false) => quote! {
-            fn __from_resources(#(#resource_names: #resource_types),*) -> Self {
-                Self { resources: #resource_values, #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
+            fn __from_resources(#(#resource_names: #resource_types,)* #(#actor_parameters),*) -> Self {
+                #configuration_check
+                Self { resources: #resource_values, #(#actor_fields)* #(#task_shutdown_fields)* #stream_channels lifecycle: ::medi_rs::Lifecycle::new() }
             }
         },
     };
@@ -401,7 +458,10 @@ pub(crate) fn generate_command_routes(
     name: &Ident,
     decorators: &[Path],
 ) -> Vec<proc_macro2::TokenStream> {
-    modules.iter().flat_map(|module| module.commands.iter().map(|command| {
+    modules.iter().flat_map(|module| module.commands.iter().filter_map(move |command| {
+        if module.actor.is_some() {
+            return None;
+        }
         let request = &command.request;
         let invoker = handler_invoker_path(&command.handler);
         let invocation = if decorators.is_empty() {
@@ -409,13 +469,13 @@ pub(crate) fn generate_command_routes(
         } else {
             decorate_handler_call(decorators, quote! { self }, &quote! { #invoker(mediator, &mediator.resources, message).await })
         };
-        quote! {
+        Some(quote! {
             impl ::medi_rs::StaticSendCommand<#name> for #request {
-                fn send(self, mediator: &#name) -> impl core::future::Future<Output = core::result::Result<Self::Response, Self::Error>> + Send {
-                    async move { #invocation }
+                fn send(self, mediator: &#name) -> impl core::future::Future<Output = core::result::Result<Self::Response, ::medi_rs::SendError<Self::Error>>> + Send {
+                    async move { #invocation.map_err(::medi_rs::SendError::Handler) }
                 }
             }
-        }
+        })
     })).collect()
 }
 
@@ -588,6 +648,7 @@ fn generate_event_start(
     resource_tuple: &proc_macro2::TokenStream,
     worker: &Ident,
     task_spawns: &[proc_macro2::TokenStream],
+    actor_spawns: &[proc_macro2::TokenStream],
     startup_hooks: &[proc_macro2::TokenStream],
 ) -> proc_macro2::TokenStream {
     let startup_spawner = generate_startup_spawner();
@@ -615,6 +676,7 @@ fn generate_event_start(
                     }
                 }
                 #(#task_spawns)*
+                #(#actor_spawns)*
                 Ok(())
             }
         }
@@ -637,12 +699,14 @@ fn generate_event_start(
                     ::medi_rs::adapters::selected::spawn(#worker(self));
                 }
                 #(#task_spawns)*
+                #(#actor_spawns)*
                 Ok(())
             }
         }
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_event_support(
     routes: &[(Type, Vec<syn::Path>)],
     name: &Ident,
@@ -651,6 +715,8 @@ pub(crate) fn generate_event_support(
     resource_tuple: &proc_macro2::TokenStream,
     config: EventDispatchConfig<'_>,
     task_spawns: &[proc_macro2::TokenStream],
+    actor_spawns: &[proc_macro2::TokenStream],
+    actor_stops: &[proc_macro2::TokenStream],
 ) -> EventSupport {
     let include_completion = !cfg!(feature = "embassy");
     let mut variants = Vec::with_capacity(routes.len() * (1 + usize::from(include_completion)));
@@ -742,7 +808,7 @@ pub(crate) fn generate_event_support(
         let field = format_ident!("task_shutdown_{index}");
         quote! { self.#field.cancel(); }
     });
-    let start = generate_event_start(resource_tuple, &worker, task_spawns, config.hooks.startup);
+    let start = generate_event_start(resource_tuple, &worker, task_spawns, actor_spawns, config.hooks.startup);
     let shutdown_hooks = config.hooks.shutdown;
     let publish_and_wait_method = include_completion.then(|| {
         quote! {
@@ -777,6 +843,7 @@ pub(crate) fn generate_event_support(
             let initiated_shutdown = self.lifecycle.request_shutdown();
             if initiated_shutdown {
                 #(#task_cancellations)*
+                #(#actor_stops)*
                 ::medi_rs::EventQueue::close(&self.event_queue).await;
                 let event_workers = Self::EVENT_WORKERS;
                 for _ in 0..event_workers {
@@ -793,6 +860,7 @@ pub(crate) fn generate_event_support(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_task_only_start(
     has_events: bool,
     has_tasks: bool,
@@ -800,9 +868,11 @@ pub(crate) fn generate_task_only_start(
     name: &Ident,
     resource_tuple: &proc_macro2::TokenStream,
     task_spawns: &[proc_macro2::TokenStream],
+    actor_spawns: &[proc_macro2::TokenStream],
+    actor_stops: &[proc_macro2::TokenStream],
     hooks: LifecycleHookCalls<'_>,
 ) -> proc_macro2::TokenStream {
-    if has_events || (!has_tasks && !has_hooks) {
+    if has_events || (!has_tasks && !has_hooks && actor_spawns.is_empty()) {
         return quote! {};
     }
     let task_cancellations = (0..task_spawns.len()).map(|index| {
@@ -824,6 +894,7 @@ pub(crate) fn generate_task_only_start(
                 #startup_spawner
                 #startup_hook_guard
                 #(#task_spawns)*
+                #(#actor_spawns)*
                 Ok(())
             }
             /// Signal registered runtime tasks and wait for them to return.
@@ -831,6 +902,7 @@ pub(crate) fn generate_task_only_start(
                 let initiated_shutdown = self.lifecycle.request_shutdown();
                 if initiated_shutdown {
                     #(#task_cancellations)*
+                    #(#actor_stops)*
                 }
                 self.lifecycle.wait().await;
                 if initiated_shutdown {
@@ -850,6 +922,7 @@ pub(crate) fn generate_task_only_start(
                 #startup_spawner
                 #startup_hook_guard
                 #(#task_spawns)*
+                #(#actor_spawns)*
                 Ok(())
             }
             /// Signal registered runtime tasks and wait for them to return.
@@ -857,6 +930,7 @@ pub(crate) fn generate_task_only_start(
                 let initiated_shutdown = self.lifecycle.request_shutdown();
                 if initiated_shutdown {
                     #(#task_cancellations)*
+                    #(#actor_stops)*
                 }
                 self.lifecycle.wait().await;
                 if initiated_shutdown {

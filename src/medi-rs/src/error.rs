@@ -54,6 +54,44 @@ pub enum TryPublishError<T> {
     Closed(T),
 }
 
+/// Error returned when a command cannot be dispatched to its actor module.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum DispatchError {
+    /// A handler attempted to await a command sent to its own module.
+    SelfDispatch,
+    /// The target module is not running or its mailbox has closed.
+    ModuleUnavailable,
+    /// The bounded, heap-free response pool has no free slot.
+    ReplyCapacityExhausted,
+}
+
+/// Application or dispatch error returned by a mediator command.
+#[derive(Debug, Eq, PartialEq)]
+pub enum SendError<E> {
+    /// The command handler returned an application error.
+    Handler(E),
+    /// Dispatch failed before the handler could produce a response.
+    Dispatch(DispatchError),
+}
+
+impl<E: core::fmt::Display> core::fmt::Display for SendError<E> {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Handler(error) => core::fmt::Display::fmt(error, formatter),
+            Self::Dispatch(error) => write!(formatter, "command dispatch failed: {error:?}"),
+        }
+    }
+}
+
+/// Error returned when a command cannot be posted without waiting for capacity.
+#[derive(Debug, Eq, PartialEq)]
+pub enum PostError<T> {
+    /// The target module mailbox is full. The command is returned to the caller.
+    MailboxFull(T),
+    /// The target module is unavailable. The command is returned to the caller.
+    ModuleUnavailable(T),
+}
+
 /// Framework error for queue operations.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum Error {
@@ -61,14 +99,51 @@ pub enum Error {
     EventPublishingError,
     /// An event worker could not receive another event.
     EventProcessingError,
+    /// A mediator command could not be dispatched to its module.
+    CommandDispatchError,
 }
 
 /// Framework result used by event publishing and queue operations.
 pub type Result<T> = core::result::Result<T, Error>;
+
+impl<E: Into<Error>> From<SendError<E>> for Error {
+    fn from(error: SendError<E>) -> Self {
+        match error {
+            SendError::Handler(error) => error.into(),
+            SendError::Dispatch(_) => Self::CommandDispatchError,
+        }
+    }
+}
+
+impl From<SendError<core::convert::Infallible>> for Error {
+    fn from(error: SendError<core::convert::Infallible>) -> Self {
+        match error {
+            SendError::Handler(never) => match never {},
+            SendError::Dispatch(_) => Self::CommandDispatchError,
+        }
+    }
+}
 
 /// Error returned when constructing a mediator with invalid configuration.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum BuildError {
     /// The configured event queue capacity was zero.
     InvalidEventQueueCapacity,
+    /// An actor module mailbox capacity was zero.
+    InvalidMailboxCapacity { module: &'static str },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DispatchError, PostError};
+
+    #[test]
+    fn actor_dispatch_errors_are_typed_and_preserve_posted_commands() {
+        assert_eq!(DispatchError::SelfDispatch, DispatchError::SelfDispatch);
+        assert_eq!(PostError::MailboxFull("command"), PostError::MailboxFull("command"));
+        assert_eq!(
+            PostError::ModuleUnavailable("command"),
+            PostError::ModuleUnavailable("command"),
+        );
+    }
 }

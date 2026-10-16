@@ -3,50 +3,14 @@
 use wasm_bindgen_test::*;
 
 #[wasm_bindgen_test(async)]
-async fn greet_returns_message() {
+async fn actor_command_returns_a_reply() {
     let greeting = medi_rs_wasm_example::greet("Rust".into()).await.unwrap();
-
     assert_eq!(greeting, "Hello, Rust!");
 }
 
 #[wasm_bindgen_test(async)]
-async fn generated_mediator_greet_returns_message() {
-    let greeting = medi_rs_wasm_example::greet_with_generated_mediator("Macro".into())
-        .await
-        .unwrap();
-
-    assert_eq!(greeting, "Hello, Macro!");
-}
-
-#[wasm_bindgen_test(async)]
-async fn publish_user_registered_returns_ok() {
+async fn actor_event_is_published() {
     medi_rs_wasm_example::publish_user_registered("user@example.com".into())
         .await
         .unwrap();
-}
-
-#[wasm_bindgen_test(async)]
-async fn generated_mediator_publish_returns_ok() {
-    medi_rs_wasm_example::publish_with_generated_mediator("hello from test".into())
-        .await
-        .unwrap();
-}
-
-#[wasm_bindgen_test]
-fn generated_mediator_rejects_a_second_start() {
-    assert!(medi_rs_wasm_example::duplicate_start_is_rejected());
-}
-
-#[wasm_bindgen_test(async)]
-async fn countdown_streams_numbers_in_order() {
-    let numbers = medi_rs_wasm_example::countdown(3, 1).await.unwrap();
-
-    assert_eq!(numbers, vec![3, 2, 1]);
-}
-
-#[wasm_bindgen_test(async)]
-async fn countdown_stream_reports_handler_errors() {
-    let error = medi_rs_wasm_example::countdown(61, 1).await.unwrap_err();
-
-    assert_eq!(error.as_string().unwrap(), "countdown from 61 is too long");
 }

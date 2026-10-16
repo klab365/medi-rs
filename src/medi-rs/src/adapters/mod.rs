@@ -67,36 +67,48 @@ macro_rules! impl_event_queue {
     };
 }
 
+#[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
+pub mod actor;
 pub mod lifecycle;
+pub mod mailbox;
 pub mod queue;
+#[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
+pub mod reply;
 pub mod shutdown;
 pub mod startup;
-pub mod stream;
+#[allow(dead_code)]
+pub(crate) mod stream;
 
 #[cfg(feature = "embassy")]
+#[allow(dead_code)]
 pub mod embassy;
 #[cfg(feature = "tokio")]
+#[allow(dead_code)]
 pub mod tokio;
 #[cfg(feature = "wasm")]
+#[allow(dead_code)]
 pub mod wasm;
 
 #[cfg(all(feature = "tokio", not(feature = "wasm"), not(feature = "embassy")))]
 pub mod selected {
+    pub use super::actor::ActorSlot;
+    pub use super::mailbox::Mailbox;
+    pub use super::reply::*;
     pub use super::tokio::TokioEventQueue as EventQueue;
-    pub use super::tokio::TokioStreamChannel as StreamChannel;
-    pub use super::tokio::TokioStreamSender as RawStreamSender;
     pub use super::tokio::spawn;
 }
 #[cfg(all(feature = "wasm", not(feature = "tokio"), not(feature = "embassy")))]
 pub mod selected {
+    pub use super::actor::ActorSlot;
+    pub use super::mailbox::Mailbox;
+    pub use super::reply::*;
     pub use super::wasm::WasmEventQueue as EventQueue;
-    pub use super::wasm::WasmStreamChannel as StreamChannel;
-    pub use super::wasm::WasmStreamSender as RawStreamSender;
     pub use super::wasm::spawn;
 }
 #[cfg(all(feature = "embassy", not(feature = "tokio"), not(feature = "wasm")))]
 pub mod selected {
+    pub use super::actor::ActorSlot;
     pub use super::embassy::EmbassyEventQueue as EventQueue;
-    pub use super::embassy::EmbassyStreamChannel as StreamChannel;
-    pub use super::embassy::EmbassyStreamSender as RawStreamSender;
+    pub use super::mailbox::Mailbox;
+    pub use super::reply::*;
 }

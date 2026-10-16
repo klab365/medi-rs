@@ -72,7 +72,9 @@ pub struct EmbassyStreamReceiver<'a, T> {
     _lease: MutexGuard<'a, CriticalSectionRawMutex, ()>,
 }
 
-impl<T: Send + 'static, const CAPACITY: usize> crate::StreamChannel<T> for EmbassyStreamChannel<T, CAPACITY> {
+impl<T: Send + 'static, const CAPACITY: usize> crate::adapters::stream::StreamChannel<T>
+    for EmbassyStreamChannel<T, CAPACITY>
+{
     type Sender<'a> = EmbassyStreamSender<'a, T>;
     type Receiver<'a> = EmbassyStreamReceiver<'a, T>;
 
@@ -97,13 +99,13 @@ impl<T: Send + 'static, const CAPACITY: usize> crate::StreamChannel<T> for Embas
     }
 }
 
-impl<T: Send> crate::StreamChannelSender<T> for EmbassyStreamSender<'_, T> {
+impl<T: Send> crate::adapters::stream::StreamChannelSender<T> for EmbassyStreamSender<'_, T> {
     async fn send(&self, item: T) {
         self.0.send(item).await;
     }
 }
 
-impl<T: Send> crate::StreamChannelReceiver<T> for EmbassyStreamReceiver<'_, T> {
+impl<T: Send> crate::adapters::stream::StreamChannelReceiver<T> for EmbassyStreamReceiver<'_, T> {
     async fn recv(&mut self) -> Option<T> {
         Some(self.receiver.receive().await)
     }
