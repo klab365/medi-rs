@@ -3,7 +3,7 @@
 //! Static async mediator with generated command dispatch, event workers, and
 //! typed resource injection.
 //!
-//! Applications define commands with [`MediCommand`], annotate async handlers
+//! Applications define commands with [`derive@MediCommand`], annotate async handlers
 //! with [`medi_handler`], group routes in [`medi_module`], and compose the
 //! selected modules with [`mediator!`]. The generated mediator dispatches
 //! commands directly to their handler and resolves handler resources from a
@@ -422,9 +422,70 @@ where
 
     /// Concrete application error returned by the command handler.
     ///
-    /// [`MediCommand`] uses [`core::convert::Infallible`] when its `error_type`
+    /// [`derive@MediCommand`] uses [`core::convert::Infallible`] when its `error_type`
     /// attribute is omitted.
     type Error: Send;
+}
+
+/// A mediator-independent, statically dispatched handle for one command route.
+///
+/// `mediator!`-generated task invokers bind the hidden mediator type at the
+/// composition site, allowing reusable handlers and tasks to accept typed
+/// contexts such as `MediCtx<MediCommand<MyCommand>>`.
+pub struct MediCtx<'a, C, M> {
+    mediator: &'a M,
+    _command: core::marker::PhantomData<fn(C)>,
+}
+
+/// Marks a command used as a [`MediCtx`] capability.
+pub struct MediCommand<C>(core::marker::PhantomData<fn() -> C>);
+
+/// Marks a stream request used as a [`MediCtx`] capability.
+pub struct MediStream<R>(core::marker::PhantomData<fn() -> R>);
+
+/// Marks an event used as a [`MediCtx`] capability.
+pub struct MediEvent<E>(core::marker::PhantomData<fn() -> E>);
+
+impl<'a, C, M> MediCtx<'a, C, M> {
+    /// Create a context bound to a route on a generated mediator.
+    #[doc(hidden)]
+    pub fn new(mediator: &'a M) -> Self {
+        Self {
+            mediator,
+            _command: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<C, M> MediCtx<'_, MediCommand<C>, M>
+where
+    C: Command + StaticSendCommand<M>,
+{
+    /// Send the command through its statically generated route.
+    pub async fn send(&self, command: C) -> core::result::Result<C::Response, C::Error> {
+        command.send(self.mediator).await
+    }
+}
+
+impl<E, M> MediCtx<'_, MediEvent<E>, M>
+where
+    E: StaticPublish<M>,
+{
+    /// Publish the event through its statically generated route.
+    pub async fn publish(&self, event: E) -> Result<()> {
+        event.publish(self.mediator).await
+    }
+}
+
+#[cfg(any(feature = "tokio", feature = "wasm", feature = "embassy"))]
+impl<R, M> MediCtx<'_, MediStream<R>, M>
+where
+    R: StreamRequest + StaticStream<M>,
+{
+    /// Open the statically generated stream route.
+    pub fn stream(&self, request: R) -> impl stream::Stream<Item = core::result::Result<R::Item, R::Error>> + '_ {
+        request.stream(self.mediator)
+    }
 }
 
 /// Static route generated for a command and a concrete mediator type.

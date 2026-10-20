@@ -116,6 +116,19 @@ jobs:
       - name: Run examples
         run: mise run-examples tokio
 
+  module-example:
+    name: Cross-crate module example
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install tools with mise
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+
+      - name: Build and run cross-crate example
+        run: cargo run --manifest-path examples/module-example/Cargo.toml --package module-example-app
+
   wasm:
     name: WASM feature
     runs-on: ubuntu-latest

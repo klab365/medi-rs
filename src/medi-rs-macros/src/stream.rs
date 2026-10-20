@@ -103,7 +103,7 @@ pub fn medi_stream_handler_inner(attribute: TokenStream, input: TokenStream) -> 
 
     let request = arguments.pop().expect("checked above");
     let sender = arguments.pop().expect("checked above");
-    let parameters = match InjectedParameters::parse(arguments) {
+    let parameters = match InjectedParameters::parse(arguments, true) {
         Ok(parameters) => parameters,
         Err(error) => return error.into_compile_error().into(),
     };
