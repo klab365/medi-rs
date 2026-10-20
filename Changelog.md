@@ -2,6 +2,13 @@
 
 All notable changes to `medi-rs` are documented here.
 
+## [3.2.0](https://github.com/klab365/medi-rs/compare/medi-rs-v3.1.0...medi-rs-v3.2.0) - 2026-10-20
+
+### Added
+
+- inject typed mediator contexts
+- support borrowed resources in tasks
+
 ## [3.1.0](https://github.com/klab365/medi-rs/compare/medi-rs-v3.0.1...medi-rs-v3.1.0) - 2026-10-14
 
 ### Added
