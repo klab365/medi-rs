@@ -1,0 +1,9 @@
+[package]
+name = "cache-module"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+medi-rs.workspace = true
+cache-contracts.workspace = true

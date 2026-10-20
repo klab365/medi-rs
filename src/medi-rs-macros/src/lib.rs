@@ -4,6 +4,7 @@
 //! manifests for the main `medi-rs` crate.
 
 mod command;
+mod common;
 mod composition;
 mod generate;
 mod handler;

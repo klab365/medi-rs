@@ -1,0 +1,12 @@
+[package]
+name = "module-example-app"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+medi-rs.workspace = true
+cache-contracts.workspace = true
+cache-module = { path = "../cache-module" }
+startup-module = { path = "../startup-module" }
+tokio = { version = "1.40.0", features = ["macros", "rt-multi-thread", "sync", "time"] }

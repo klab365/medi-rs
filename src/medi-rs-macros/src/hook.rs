@@ -83,7 +83,7 @@ fn medi_hook_inner_impl(phase: &str, attribute: TokenStream, input: TokenStream)
         }
         arguments.remove(0);
     }
-    let parameters = match InjectedParameters::parse(arguments) {
+    let parameters = match InjectedParameters::parse(arguments, true) {
         Ok(parameters) => parameters,
         Err(error) => return error.into_compile_error(),
     };

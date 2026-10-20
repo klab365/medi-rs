@@ -20,7 +20,7 @@ use embassy_sync::{
 use embassy_time::{Duration, Timer};
 use medi_rs::stream::TryStreamExt;
 use medi_rs::{
-    MediCommand, MediStreamRequest, StreamSender, medi_handler, medi_module, medi_shutdown, medi_startup,
+    MediCommand, MediCtx, MediStreamRequest, StreamSender, medi_handler, medi_module, medi_shutdown, medi_startup,
     medi_stream_handler, medi_task, mediator,
 };
 use panic_probe as _;
@@ -112,7 +112,7 @@ async fn startup_indicator(board: BoardApi) {
 }
 
 #[medi_startup]
-fn initialize_board(spawner: &medi_rs::StartupSpawner, _mediator: &AppMediator, board: BoardApi) {
+fn initialize_board(spawner: &medi_rs::StartupSpawner, board: BoardApi) {
     if let Ok(token) = startup_indicator(board) {
         spawner.spawn(token);
     }
@@ -120,15 +120,19 @@ fn initialize_board(spawner: &medi_rs::StartupSpawner, _mediator: &AppMediator, 
 }
 
 #[medi_shutdown]
-fn release_board(_mediator: &AppMediator, _board: BoardApi) {
+fn release_board(_board: BoardApi) {
     info!("mediator shutdown hook: board released");
 }
 
 #[medi_handler]
-async fn count_button_press(mediator: &AppMediator, board: BoardApi, _req: ButtonPressed) -> medi_rs::Result<u32> {
+async fn count_button_press(
+    events: MediCtx<medi_rs::MediEvent<ButtonObserved>>,
+    board: BoardApi,
+    _req: ButtonPressed,
+) -> medi_rs::Result<u32> {
     board.toggle_activity_led();
     let count = PRESS_COUNT.fetch_add(1, Ordering::Relaxed) + 1;
-    mediator.publish(ButtonObserved { count }).await?;
+    events.publish(ButtonObserved { count }).await?;
     Ok(count)
 }
 
@@ -159,18 +163,21 @@ async fn blink_pattern(
 }
 
 #[medi_task]
-async fn button_monitor(mediator: &AppMediator, button: ButtonInput) {
+async fn button_monitor(
+    context: MediCtx<medi_rs::MediCommand<ButtonPressed>>,
+    streams: MediCtx<medi_rs::MediStream<BlinkPattern>>,
+    button: ButtonInput,
+) {
     loop {
         button.lock().await.wait_for_low().await;
-        let count = mediator.send(ButtonPressed).await.unwrap();
+        let count = context.send(ButtonPressed).await.unwrap();
         info!(
             "button A pressed: {}, observed: {}",
             count,
             OBSERVED_COUNT.load(Ordering::Relaxed)
         );
 
-        // Every sixth press requests too many blinks to show the stream error.
-        let blinks = mediator
+        let blinks = streams
             .stream(BlinkPattern {
                 blinks: count % (MAX_BLINKS + 1) + 1,
             })
@@ -189,7 +196,7 @@ async fn button_monitor(mediator: &AppMediator, button: ButtonInput) {
 }
 
 #[medi_task]
-async fn display(_mediator: &AppMediator, board: BoardApi) {
+async fn display(board: BoardApi) {
     loop {
         board.toggle_activity_led();
         Timer::after(Duration::from_millis(500)).await;

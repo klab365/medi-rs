@@ -1,0 +1,15 @@
+[workspace]
+members = ["contracts", "cache-module", "startup-module", "app"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+publish = false
+
+[workspace.dependencies]
+medi-rs = { path = "../../src/medi-rs", default-features = false, features = ["tokio"] }
+cache-contracts = { path = "contracts" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

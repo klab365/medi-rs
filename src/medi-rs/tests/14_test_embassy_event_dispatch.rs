@@ -2,6 +2,7 @@
 
 use std::{
     sync::{
+        Mutex,
         atomic::{AtomicU32, Ordering},
         mpsc,
     },
@@ -23,6 +24,38 @@ static TASK_STARTED: AtomicU32 = AtomicU32::new(0);
 static SPAWNER_INJECTED: AtomicU32 = AtomicU32::new(0);
 static SPAWNED_WITH_RESOURCE: AtomicU32 = AtomicU32::new(0);
 static SPAWNED_DURING_STARTUP: AtomicU32 = AtomicU32::new(0);
+static CONTEXT_RESULT: AtomicU32 = AtomicU32::new(0);
+static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+#[derive(medi_rs_macros::MediCommand)]
+#[medi_command(return_type = u32)]
+struct ContextCommand;
+
+#[derive(medi_rs_macros::MediCommand)]
+#[medi_command(return_type = u32, error_type = medi_rs::Error)]
+struct ContextCaller;
+
+#[medi_handler]
+async fn handle_context_command(_: ContextCommand) -> Result<u32, core::convert::Infallible> {
+    Ok(42)
+}
+
+#[medi_handler]
+async fn call_context_command(
+    state: TaskState,
+    context: medi_rs::MediCtx<medi_rs::MediCommand<ContextCommand>>,
+    events: medi_rs::MediCtx<medi_rs::MediEvent<EventObserved>>,
+    _: ContextCaller,
+) -> medi_rs::Result<u32> {
+    let _ = state;
+    events.publish(EventObserved(99)).await?;
+    context.send(ContextCommand).await.map_err(|never| match never {})
+}
+
+#[medi_task]
+async fn use_context(context: medi_rs::MediCtx<medi_rs::MediCommand<ContextCaller>>) {
+    CONTEXT_RESULT.store(context.send(ContextCaller).await.unwrap(), Ordering::Release);
+}
 
 #[medi_handler]
 async fn observe_event(event: EventObserved) -> medi_rs::Result<()> {
@@ -64,7 +97,8 @@ medi_module! {
     manifest embassy_manifest;
     resources { task_state: TaskState; send_spawner: SendSpawner; }
     events { EventObserved => [observe_event]; }
-    tasks { initialize_board; receives_spawner; }
+    tasks { initialize_board; receives_spawner; use_context; }
+    commands { ContextCommand => handle_context_command; ContextCaller => call_context_command; }
     startup { initialize_startup_task; }
 }
 
@@ -78,6 +112,7 @@ mediator! {
 
 #[test]
 fn embassy_queue_honors_the_generated_capacity() {
+    let _guard = TEST_LOCK.lock().expect("test lock must not be poisoned");
     let (checked_tx, checked_rx) = mpsc::sync_channel(1);
 
     thread::spawn(move || {
@@ -106,6 +141,7 @@ fn embassy_queue_honors_the_generated_capacity() {
 
 #[test]
 fn embassy_worker_dispatches_published_events() {
+    let _guard = TEST_LOCK.lock().expect("test lock must not be poisoned");
     let (started_tx, started_rx) = mpsc::sync_channel(1);
 
     thread::spawn(move || {
@@ -137,6 +173,7 @@ fn embassy_worker_dispatches_published_events() {
         || SPAWNER_INJECTED.load(Ordering::Acquire) != 1
         || SPAWNED_WITH_RESOURCE.load(Ordering::Acquire) != 1
         || SPAWNED_DURING_STARTUP.load(Ordering::Acquire) != 1
+        || CONTEXT_RESULT.load(Ordering::Acquire) != 42
     {
         assert!(Instant::now() < deadline, "event worker or Embassy task did not run");
         thread::sleep(Duration::from_millis(1));
